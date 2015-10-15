@@ -38,7 +38,7 @@ func NewElasticEngine() Engine {
 }
 
 func (mi *elasticEngine) Drop(collection string) {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://localhost:9200/%s/", collection), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://localhost:9200/store/%s/", collection), nil)
 	if err != nil {
 		panic(err)
 	}
