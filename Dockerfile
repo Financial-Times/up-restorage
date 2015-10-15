@@ -16,4 +16,5 @@ RUN apk add --update bash \
 
 EXPOSE 8082
 
-CMD ./up-restorage
+#CMD ./up-restorage $ARGS
+
