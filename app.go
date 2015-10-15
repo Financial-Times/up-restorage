@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/jawher/mow.cli"
 	"io"
 	"log"
 	"net/http"
@@ -24,8 +25,23 @@ func main() {
 	pprof.StartCPUProfile(f)
 	defer pprof.StopCPUProfile()
 
-	engine := NewElasticEngine()
+	app := cli.App("restorage", "A RESTful storage API with pluggable backends")
+	port := app.IntOpt("port", 8080, "Port to listen on")
 
+	app.Command("elastic", "use the elastic search backend", func(cmd *cli.Cmd) {
+		url := cmd.StringArg("URL", "", "elastic search endpoint url")
+		cmd.Action = func() {
+			println(*url)
+			serve(NewElasticEngine(*url), *port)
+		}
+
+	})
+
+	app.Run(os.Args)
+
+}
+
+func serve(engine Engine, port int) {
 	ah := apiHandlers{engine}
 
 	m := mux.NewRouter()
@@ -40,10 +56,10 @@ func main() {
 	m.HandleFunc("/{collection}/", ah.dumpAll).Methods("GET")
 
 	go func() {
-		fmt.Printf("listening on 8082..")
-		err = http.ListenAndServe(":8082", nil)
+		fmt.Printf("listening on %d\n", port)
+		err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 		if err != nil {
-			log.Printf("web stuff failed: %v\n", err)
+			log.Printf("web server failed: %v\n", err)
 		}
 	}()
 
@@ -55,7 +71,7 @@ func main() {
 	println("exiting")
 	engine.Close()
 
-	f, err = os.Create("/tmp/memprof")
+	f, err := os.Create("/tmp/memprof")
 	if err != nil {
 		panic(err)
 	}

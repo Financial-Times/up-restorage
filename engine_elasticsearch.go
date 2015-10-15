@@ -25,20 +25,25 @@ const (
 )
 
 type elasticEngine struct {
-	client *http.Client
+	client  *http.Client
+	baseURL string
 }
 
-func NewElasticEngine() Engine {
+func NewElasticEngine(elasticURL string) Engine {
 	transport := &http.Transport{MaxIdleConnsPerHost: 30}
-	i := &elasticEngine{
-		client: &http.Client{Transport: transport},
+	e := &elasticEngine{
+		client:  &http.Client{Transport: transport},
+		baseURL: elasticURL,
+	}
+	for strings.HasSuffix(e.baseURL, "/") {
+		e.baseURL = e.baseURL[0 : len(e.baseURL)-1]
 	}
 
-	return i
+	return e
 }
 
 func (mi *elasticEngine) Drop(collection string) {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://localhost:9200/store/%s/", collection), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/store/%s/", mi.baseURL, collection), nil)
 	if err != nil {
 		panic(err)
 	}
@@ -66,7 +71,7 @@ func (mi *elasticEngine) Write(collection, id string, cont Document) error {
 		w.Close()
 	}()
 
-	req, err := http.NewRequest("PUT", fmt.Sprintf("http://localhost:9200/store/%s/%s", collection, id), r)
+	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/store/%s/%s", mi.baseURL, collection, id), r)
 	if err != nil {
 		panic(err)
 	}
@@ -81,7 +86,7 @@ func (mi *elasticEngine) Write(collection, id string, cont Document) error {
 }
 
 func (ee *elasticEngine) Count(collection string) int {
-	res, err := ee.client.Get(fmt.Sprintf("http://localhost:9200/store/%s/_count", collection))
+	res, err := ee.client.Get(fmt.Sprintf("%s/store/%s/_count", ee.baseURL, collection))
 	if err != nil {
 		panic(err)
 	}
@@ -103,7 +108,7 @@ type esCountResult struct {
 }
 
 func (ee *elasticEngine) Load(collection, id string) (bool, Document, error) {
-	res, err := ee.client.Get(fmt.Sprintf("http://localhost:9200/store/%s/", collection) + id)
+	res, err := ee.client.Get(fmt.Sprintf("%s/store/%s/%s", ee.baseURL, collection, id))
 	if err != nil {
 		panic(err)
 	}
@@ -145,7 +150,7 @@ func (ee elasticEngine) Search(collection string, terms []string, closechan chan
 func (ee elasticEngine) query(collection, q string, closechan chan struct{}) (chan Document, error) {
 	cont := make(chan Document)
 
-	res, err := ee.client.Post(fmt.Sprintf("http://localhost:9200/store/%s/_search", collection), "application/json", strings.NewReader(q))
+	res, err := ee.client.Post(fmt.Sprintf("%s/store/%s/_search", ee.baseURL, collection), "application/json", strings.NewReader(q))
 	if err != nil {
 		panic(err)
 	}
