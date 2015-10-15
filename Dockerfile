@@ -1,6 +1,6 @@
 FROM alpine
 
-ADD *.go /
+ADD . /
 RUN apk add --update bash \
   && apk --update add go git\
   && REPO_PATH="github.com/Financial-Times/up-restorage" \
