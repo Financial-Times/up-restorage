@@ -24,9 +24,9 @@ func main() {
 	pprof.StartCPUProfile(f)
 	defer pprof.StopCPUProfile()
 
-	index := NewElasticEngine()
+	engine := NewElasticEngine()
 
-	ah := apiHandlers{index}
+	ah := apiHandlers{engine}
 
 	m := mux.NewRouter()
 	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, m))
@@ -53,7 +53,7 @@ func main() {
 	// wait for ctrl-c
 	<-c
 	println("exiting")
-	index.Close()
+	engine.Close()
 
 	f, err = os.Create("/tmp/memprof")
 	if err != nil {
@@ -67,7 +67,7 @@ func main() {
 }
 
 type apiHandlers struct {
-	index Engine
+	engine Engine
 }
 
 func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +75,7 @@ func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
 	id := vars["id"]
 	collection := vars["collection"]
 
-	found, art, err := ah.index.Load(collection, id)
+	found, art, err := ah.engine.Load(collection, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -126,7 +126,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer wg.Done()
 			for doc := range docCh {
-				err := ah.index.Write(collection, getId(doc), doc)
+				err := ah.engine.Write(collection, getId(doc), doc)
 				if err != nil {
 					errCh <- err
 					return
@@ -176,7 +176,7 @@ func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = ah.index.Write(collection, id, doc)
+	err = ah.engine.Write(collection, id, doc)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("write failed:\n%v\n", err), http.StatusInternalServerError)
 		return
@@ -186,7 +186,7 @@ func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 func (ah *apiHandlers) dropHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	collection := vars["collection"]
-	ah.index.Drop(collection)
+	ah.engine.Drop(collection)
 }
 
 func (ah *apiHandlers) searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -206,7 +206,7 @@ func (ah *apiHandlers) searchHandler(w http.ResponseWriter, r *http.Request) {
 
 	stop := make(chan struct{})
 	defer close(stop)
-	cont, err := ah.index.Search(collection, terms, stop, count)
+	cont, err := ah.engine.Search(collection, terms, stop, count)
 	if err == ERR_NOT_IMPLEMENTED {
 		http.Error(w, err.Error(), http.StatusNotImplemented)
 		return
@@ -238,7 +238,7 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	stop := make(chan struct{})
 	defer close(stop)
-	all, err := ah.index.All(collection, stop)
+	all, err := ah.engine.All(collection, stop)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -252,5 +252,5 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 func (ah *apiHandlers) countHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	collection := vars["collection"]
-	fmt.Fprintf(w, "%d", ah.index.Count(collection))
+	fmt.Fprintf(w, "%d", ah.engine.Count(collection))
 }
