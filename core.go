@@ -14,8 +14,7 @@ type Engine interface {
 }
 
 var (
-	ERR_NOT_IMPLEMENTED = errors.New("not implemented")
-	ERR_INVALID_QUERY   = errors.New("invalid query")
+	ErrInvalidQuery = errors.New("invalid query")
 )
 
 type Document map[string]interface{}

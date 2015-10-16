@@ -137,7 +137,7 @@ func (ee elasticEngine) query(collection, q string, closechan chan struct{}) (ch
 	case res.StatusCode == 200:
 	case res.StatusCode == 400:
 		res.Body.Close()
-		return nil, ERR_INVALID_QUERY
+		return nil, ErrInvalidQuery
 	default:
 		panic(res.StatusCode)
 	}
