@@ -152,7 +152,7 @@ func (ee elasticEngine) query(collection, q string, closechan chan struct{}) (ch
 			panic(err)
 		}
 		for _, h := range result.Hits.Hits {
-			id := h.Id
+			id := h.ID
 			found, c, err := ee.Load(collection, id)
 			if err != nil {
 				panic(err)
@@ -178,8 +178,8 @@ type esSearchResult struct {
 	Hits hitResult `json:"hits"`
 }
 type hitResult struct {
-	Hits []esSearchId `json:"hits"`
+	Hits []esSearchID `json:"hits"`
 }
-type esSearchId struct {
-	Id string `json:"_id"`
+type esSearchID struct {
+	ID string `json:"_id"`
 }
