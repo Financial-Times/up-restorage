@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
 	"log"
@@ -65,7 +66,7 @@ func (eng *mongoEngine) Drop(collection string) {
 func (eng *mongoEngine) Write(collection string, id string, cont Document) error {
 	coll := eng.session.DB(eng.dbName).C(collection)
 	if id == "" {
-		panic("missing id")
+		return errors.New("missing id")
 	}
 	_, err := coll.Upsert(bson.D{{"uuid", id}}, cont) //TODO: parameterise uuid
 	if err != nil {
