@@ -94,6 +94,7 @@ func (eng *mongoEngine) Load(collection, id string) (bool, Document, error) {
 	if err != nil {
 		return false, Document{}, err
 	}
+	cleanup(content)
 	return true, content, nil
 }
 
@@ -106,6 +107,7 @@ func (eng mongoEngine) All(collection string, stopchan chan struct{}) (chan Docu
 		iter := coll.Find(nil).Iter()
 		var result Document
 		for iter.Next(&result) {
+			cleanup(result)
 			select {
 			case <-stopchan:
 				break
@@ -118,4 +120,8 @@ func (eng mongoEngine) All(collection string, stopchan chan struct{}) (chan Docu
 	}()
 
 	return cont, nil
+}
+
+func cleanup(doc Document) {
+	delete(doc, "_id")
 }
