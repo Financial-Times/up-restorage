@@ -55,7 +55,7 @@ func (eng *mongoEngine) EnsureIndexes(collection string) {
 }
 
 func (eng *mongoEngine) Drop(collection string) {
-	err := eng.session.DB("ftindex").C(collection).DropCollection()
+	err := eng.session.DB(eng.dbName).C(collection).DropCollection()
 	if err != nil {
 		log.Printf("failed to drop collection")
 	}
