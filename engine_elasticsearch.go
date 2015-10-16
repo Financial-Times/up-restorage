@@ -107,8 +107,7 @@ func (ee *elasticEngine) Load(collection, id string) (bool, Document, error) {
 		if err != nil {
 			panic(err)
 		}
-		var doc Document = result.Source
-		return true, doc, nil
+		return true, result.Source, nil
 	case res.StatusCode == 404:
 		return false, Document{}, nil
 	default:
