@@ -28,12 +28,12 @@ func NewElasticEngine(elasticURL string) Engine {
 	return e
 }
 
-func (mi *elasticEngine) Drop(collection string) {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/store/%s/", mi.baseURL, collection), nil)
+func (ee *elasticEngine) Drop(collection string) {
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/store/%s/", ee.baseURL, collection), nil)
 	if err != nil {
 		panic(err)
 	}
-	resp, err := mi.client.Do(req)
+	resp, err := ee.client.Do(req)
 	if err != nil {
 		panic(err)
 	}
@@ -42,7 +42,7 @@ func (mi *elasticEngine) Drop(collection string) {
 	}
 }
 
-func (mi *elasticEngine) Write(collection, id string, cont Document) error {
+func (ee *elasticEngine) Write(collection, id string, cont Document) error {
 	if id == "" {
 		return errors.New("missing id")
 	}
@@ -57,11 +57,11 @@ func (mi *elasticEngine) Write(collection, id string, cont Document) error {
 		w.Close()
 	}()
 
-	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/store/%s/%s", mi.baseURL, collection, id), r)
+	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/store/%s/%s", ee.baseURL, collection, id), r)
 	if err != nil {
 		panic(err)
 	}
-	resp, err := mi.client.Do(req)
+	resp, err := ee.client.Do(req)
 	if err != nil {
 		panic(err)
 	}
