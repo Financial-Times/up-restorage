@@ -146,7 +146,7 @@ func (ee elasticEngine) query(collection, q string, closechan chan struct{}) (ch
 
 		defer res.Body.Close()
 		dec := json.NewDecoder(res.Body)
-		var result esRecentResult
+		var result esSearchResult
 		err := dec.Decode(&result)
 		if err != nil {
 			panic(err)
@@ -172,16 +172,6 @@ func (ee elasticEngine) query(collection, q string, closechan chan struct{}) (ch
 }
 
 func (ee elasticEngine) Close() {
-}
-
-type esRecentResult struct {
-	Hits esRecentHit `json:"hits"`
-}
-type esRecentHit struct {
-	Hits []esRecentId `json:"hits"`
-}
-type esRecentId struct {
-	Id string `json:"_id"`
 }
 
 type esSearchResult struct {
