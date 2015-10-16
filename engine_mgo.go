@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
 	"log"
@@ -17,10 +16,9 @@ func (eng mongoEngine) Close() {
 }
 
 // NewMongoEngine returns an Engine based on a mongodb batabase backend
-func NewMongoEngine(dbName string, host string, port int) Engine {
-	hostPort := fmt.Sprintf("%s:%d", host, port)
-	log.Printf("connecting to mongodb '%s'\n", hostPort)
-	s, err := mgo.Dial(hostPort)
+func NewMongoEngine(dbName string, hostPorts string) Engine {
+	log.Printf("connecting to mongodb '%s'\n", hostPorts)
+	s, err := mgo.Dial(hostPorts)
 	if err != nil {
 		panic(err)
 	}

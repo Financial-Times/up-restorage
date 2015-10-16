@@ -37,10 +37,9 @@ func main() {
 	})
 
 	app.Command("mongo", "use the mongodb backend", func(cmd *cli.Cmd) {
-		host := cmd.StringArg("HOST", "", "hostname")
-		mongoport := cmd.IntArg("PORT", 0, "port")
+		hostports := cmd.StringArg("HOSTS", "", "hostname1:port1,hostname2:port2...")
 		cmd.Action = func() {
-			serve(NewMongoEngine("store", *host, *mongoport), *port)
+			serve(NewMongoEngine("store", *hostports), *port)
 		}
 
 	})
