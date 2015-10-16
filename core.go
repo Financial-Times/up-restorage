@@ -7,7 +7,6 @@ import (
 type Engine interface {
 	Load(collection, id string) (bool, Document, error)
 	Write(collection, id string, c Document) error
-	Search(collection string, terms []string, stopChan chan struct{}, limit int) (chan Document, error)
 	Count(collection string) int
 	All(collection string, stopchan chan struct{}) (chan Document, error)
 	Drop(collection string)

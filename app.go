@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/pprof"
-	"strconv"
 	"sync"
 )
 
@@ -47,7 +46,6 @@ func serve(engine Engine, port int) {
 	m := mux.NewRouter()
 	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, m))
 
-	m.HandleFunc("/{collection}/search", ah.searchHandler).Methods("GET")
 	m.HandleFunc("/{collection}/count", ah.countHandler).Methods("GET")
 	m.HandleFunc("/{collection}/{id}", ah.idReadHandler).Methods("GET")
 	m.HandleFunc("/{collection}/{id}", ah.idWriteHandler).Methods("PUT")
@@ -203,48 +201,6 @@ func (ah *apiHandlers) dropHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	collection := vars["collection"]
 	ah.engine.Drop(collection)
-}
-
-func (ah *apiHandlers) searchHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	collection := vars["collection"]
-
-	count := 20
-	r.ParseForm()
-	max := r.Form["max"]
-	if len(max) == 1 {
-		i, err := strconv.Atoi(max[0])
-		if err == nil {
-			count = i
-		}
-	}
-	terms := r.Form["term"]
-
-	stop := make(chan struct{})
-	defer close(stop)
-	cont, err := ah.engine.Search(collection, terms, stop, count)
-	if err == ERR_NOT_IMPLEMENTED {
-		http.Error(w, err.Error(), http.StatusNotImplemented)
-		return
-	}
-	if err == ERR_INVALID_QUERY {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Add("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	for c := range cont {
-		err := enc.Encode(c)
-		if err != nil {
-			log.Printf("error writing json to response: %v\n", err)
-			return
-		}
-		fmt.Fprint(w, "\n")
-	}
 }
 
 func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {

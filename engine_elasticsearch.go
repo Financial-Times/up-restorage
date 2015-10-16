@@ -10,20 +10,6 @@ import (
 	"strings"
 )
 
-const (
-	searchString = `
-	{
-		"query": {
-			"query_string": {
-				"query":"%v"}
-			},
-			"fields":[],
-			"size": %d,
-			"from": 0
-		}
-	}`
-)
-
 type elasticEngine struct {
 	client  *http.Client
 	baseURL string
@@ -136,14 +122,6 @@ type esGetResult struct {
 
 func (ee elasticEngine) All(collection string, closechan chan struct{}) (chan Document, error) {
 	q := fmt.Sprintf("{\"query\":{\"match_all\": {}}, \"fields\":[], \"size\": %d,  \"from\": 0}", ee.Count(collection)+1000)
-	return ee.query(collection, q, closechan)
-}
-
-func (ee elasticEngine) Search(collection string, terms []string, closechan chan struct{}, limit int) (chan Document, error) {
-
-	termStr := strings.Join(terms, " ")
-
-	q := fmt.Sprintf(searchString, termStr, limit)
 	return ee.query(collection, q, closechan)
 }
 
