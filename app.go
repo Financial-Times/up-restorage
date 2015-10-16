@@ -140,7 +140,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer wg.Done()
 			for doc := range docCh {
-				err := ah.engine.Write(collection, getId(doc), doc)
+				err := ah.engine.Write(collection, getID(doc), doc)
 				if err != nil {
 					errCh <- err
 					return
@@ -162,7 +162,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getId(doc Document) string {
+func getID(doc Document) string {
 	// TODO: obviously this should be parameterised
 	if id, ok := doc["uuid"].(string); ok {
 		return id
@@ -185,7 +185,7 @@ func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if getId(doc) != id {
+	if getID(doc) != id {
 		http.Error(w, "id does not match", http.StatusBadRequest)
 		return
 	}
