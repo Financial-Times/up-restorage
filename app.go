@@ -46,7 +46,7 @@ func serve(engine Engine, port int) {
 	m := mux.NewRouter()
 	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, m))
 
-	m.HandleFunc("/{collection}/count", ah.countHandler).Methods("GET")
+	m.HandleFunc("/{collection}/_count", ah.countHandler).Methods("GET")
 	m.HandleFunc("/{collection}/{id}", ah.idReadHandler).Methods("GET")
 	m.HandleFunc("/{collection}/{id}", ah.idWriteHandler).Methods("PUT")
 	m.HandleFunc("/{collection}/", ah.dropHandler).Methods("DELETE")
@@ -224,5 +224,5 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 func (ah *apiHandlers) countHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	collection := vars["collection"]
-	fmt.Fprintf(w, "%d", ah.engine.Count(collection))
+	fmt.Fprintf(w, "%d\n", ah.engine.Count(collection))
 }
