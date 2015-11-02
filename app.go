@@ -29,9 +29,10 @@ func main() {
 
 	app.Command("elastic", "use the elastic search backend", func(cmd *cli.Cmd) {
 		url := cmd.StringArg("URL", "", "elastic search endpoint url")
+		indexName := cmd.StringOpt("index-name", "store", "elastic search index name")
 		cmd.Action = func() {
 			println(*url)
-			serve(NewElasticEngine(*url), *port)
+			serve(NewElasticEngine(*url, *indexName), *port)
 		}
 
 	})

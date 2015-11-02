@@ -11,15 +11,17 @@ import (
 )
 
 type elasticEngine struct {
-	client  *http.Client
-	baseURL string
+	client    *http.Client
+	baseURL   string
+	indexName string
 }
 
-func NewElasticEngine(elasticURL string) Engine {
+func NewElasticEngine(elasticURL string, indexName string) Engine {
 	transport := &http.Transport{MaxIdleConnsPerHost: 30}
 	e := &elasticEngine{
-		client:  &http.Client{Transport: transport},
-		baseURL: elasticURL,
+		client:    &http.Client{Transport: transport},
+		baseURL:   elasticURL,
+		indexName: indexName,
 	}
 	for strings.HasSuffix(e.baseURL, "/") {
 		e.baseURL = e.baseURL[0 : len(e.baseURL)-1]
@@ -29,7 +31,7 @@ func NewElasticEngine(elasticURL string) Engine {
 }
 
 func (ee *elasticEngine) Drop(collection string) {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/store/%s/", ee.baseURL, collection), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s/%s/", ee.baseURL, ee.indexName, collection), nil)
 	if err != nil {
 		panic(err)
 	}
@@ -57,7 +59,7 @@ func (ee *elasticEngine) Write(collection, id string, cont Document) error {
 		w.Close()
 	}()
 
-	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/store/%s/%s", ee.baseURL, collection, id), r)
+	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection, id), r)
 	if err != nil {
 		panic(err)
 	}
@@ -72,7 +74,7 @@ func (ee *elasticEngine) Write(collection, id string, cont Document) error {
 }
 
 func (ee *elasticEngine) Count(collection string) int {
-	res, err := ee.client.Get(fmt.Sprintf("%s/store/%s/_count", ee.baseURL, collection))
+	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/_count", ee.baseURL, ee.indexName, collection))
 	if err != nil {
 		panic(err)
 	}
@@ -94,7 +96,7 @@ type esCountResult struct {
 }
 
 func (ee *elasticEngine) Load(collection, id string) (bool, Document, error) {
-	res, err := ee.client.Get(fmt.Sprintf("%s/store/%s/%s", ee.baseURL, collection, id))
+	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection, id))
 	if err != nil {
 		panic(err)
 	}
@@ -127,7 +129,7 @@ func (ee elasticEngine) All(collection string, closechan chan struct{}) (chan Do
 func (ee elasticEngine) query(collection, q string, closechan chan struct{}) (chan Document, error) {
 	cont := make(chan Document)
 
-	res, err := ee.client.Post(fmt.Sprintf("%s/store/%s/_search", ee.baseURL, collection), "application/json", strings.NewReader(q))
+	res, err := ee.client.Post(fmt.Sprintf("%s/%s/%s/_search", ee.baseURL, ee.indexName, collection), "application/json", strings.NewReader(q))
 	if err != nil {
 		panic(err)
 	}
