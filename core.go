@@ -5,11 +5,11 @@ import (
 )
 
 type Engine interface {
-	Load(collection, id string) (bool, Document, error)
-	Write(collection, id string, c Document) error
-	Count(collection string) int
-	All(collection string, stopchan chan struct{}) (chan Document, error)
-	Drop(collection string)
+	Load(c Collection, id string) (bool, Document, error)
+	Write(c Collection, id string, doc Document) error
+	Count(c Collection) int
+	All(c Collection, stopchan chan struct{}) (chan Document, error)
+	Drop(c Collection)
 	Close()
 }
 
@@ -18,3 +18,10 @@ var (
 )
 
 type Document map[string]interface{}
+
+type Collections map[string]Collection
+
+type Collection struct {
+	name           string
+	idPropertyName string
+}

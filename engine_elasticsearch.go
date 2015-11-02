@@ -30,8 +30,8 @@ func NewElasticEngine(elasticURL string, indexName string) Engine {
 	return e
 }
 
-func (ee *elasticEngine) Drop(collection string) {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s/%s/", ee.baseURL, ee.indexName, collection), nil)
+func (ee *elasticEngine) Drop(collection Collection) {
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s/%s/", ee.baseURL, ee.indexName, collection.name), nil)
 	if err != nil {
 		panic(err)
 	}
@@ -44,7 +44,7 @@ func (ee *elasticEngine) Drop(collection string) {
 	}
 }
 
-func (ee *elasticEngine) Write(collection, id string, cont Document) error {
+func (ee *elasticEngine) Write(collection Collection, id string, cont Document) error {
 	if id == "" {
 		return errors.New("missing id")
 	}
@@ -59,7 +59,7 @@ func (ee *elasticEngine) Write(collection, id string, cont Document) error {
 		w.Close()
 	}()
 
-	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection, id), r)
+	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id), r)
 	if err != nil {
 		panic(err)
 	}
@@ -73,8 +73,8 @@ func (ee *elasticEngine) Write(collection, id string, cont Document) error {
 	return nil
 }
 
-func (ee *elasticEngine) Count(collection string) int {
-	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/_count", ee.baseURL, ee.indexName, collection))
+func (ee *elasticEngine) Count(collection Collection) int {
+	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/_count", ee.baseURL, ee.indexName, collection.name))
 	if err != nil {
 		panic(err)
 	}
@@ -95,8 +95,8 @@ type esCountResult struct {
 	Count int `json:"count"`
 }
 
-func (ee *elasticEngine) Load(collection, id string) (bool, Document, error) {
-	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection, id))
+func (ee *elasticEngine) Load(collection Collection, id string) (bool, Document, error) {
+	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id))
 	if err != nil {
 		panic(err)
 	}
@@ -121,15 +121,15 @@ type esGetResult struct {
 	Source Document `json:"_source"`
 }
 
-func (ee elasticEngine) All(collection string, closechan chan struct{}) (chan Document, error) {
+func (ee elasticEngine) All(collection Collection, closechan chan struct{}) (chan Document, error) {
 	q := fmt.Sprintf("{\"query\":{\"match_all\": {}}, \"fields\":[], \"size\": %d,  \"from\": 0}", ee.Count(collection)+1000)
 	return ee.query(collection, q, closechan)
 }
 
-func (ee elasticEngine) query(collection, q string, closechan chan struct{}) (chan Document, error) {
+func (ee elasticEngine) query(collection Collection, q string, closechan chan struct{}) (chan Document, error) {
 	cont := make(chan Document)
 
-	res, err := ee.client.Post(fmt.Sprintf("%s/%s/%s/_search", ee.baseURL, ee.indexName, collection), "application/json", strings.NewReader(q))
+	res, err := ee.client.Post(fmt.Sprintf("%s/%s/%s/_search", ee.baseURL, ee.indexName, collection.name), "application/json", strings.NewReader(q))
 	if err != nil {
 		panic(err)
 	}

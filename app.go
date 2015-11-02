@@ -12,8 +12,27 @@ import (
 	"os"
 	"os/signal"
 	"runtime/pprof"
+	"strings"
 	"sync"
 )
+
+func parseCollections(mappings string) Collections {
+	idMapping := make(map[string]Collection)
+	for _, mapping := range strings.Split(mappings, ",") {
+		kv := strings.Split(mapping, ":")
+		if len(kv) != 2 {
+			log.Printf("can't parse id mapping %s, skipping\n", mapping)
+		} else {
+			idMapping[kv[0]] = Collection{name: kv[0], idPropertyName: kv[1]}
+		}
+	}
+
+	log.Printf("collection identifier mappings are:\n")
+	for k, v := range idMapping {
+		log.Printf("%s : %s", k, v)
+	}
+	return idMapping
+}
 
 func main() {
 
@@ -26,21 +45,23 @@ func main() {
 
 	app := cli.App("restorage", "A RESTful storage API with pluggable backends")
 	port := app.IntOpt("port", 8080, "Port to listen on")
+	idMap := app.StringOpt("id-map", "test1:uuid,test2:id,...", "Mapping of collection name to identifier property name")
 
 	app.Command("elastic", "use the elastic search backend", func(cmd *cli.Cmd) {
 		url := cmd.StringArg("URL", "", "elastic search endpoint url")
 		indexName := cmd.StringOpt("index-name", "store", "elastic search index name")
 		cmd.Action = func() {
-			serve(NewElasticEngine(*url, *indexName), *port)
+			serve(NewElasticEngine(*url, *indexName), parseCollections(*idMap), *port)
 		}
 
 	})
 
 	app.Command("mongo", "use the mongodb backend", func(cmd *cli.Cmd) {
-		hostports := cmd.StringArg("HOSTS", "", "hostname1:port1,hostname2:port2...")
+		hostports := cmd.StringArg("HOSTS", "", "hostname1:port1,hostname2:port2,...")
 		dbname := cmd.StringOpt("dbname", "store", "database name")
 		cmd.Action = func() {
-			serve(NewMongoEngine(*dbname, *hostports), *port)
+			colls := parseCollections(*idMap)
+			serve(NewMongoEngine(*dbname, colls, *hostports), colls, *port)
 		}
 
 	})
@@ -49,8 +70,8 @@ func main() {
 
 }
 
-func serve(engine Engine, port int) {
-	ah := apiHandlers{engine}
+func serve(engine Engine, collections Collections, port int) {
+	ah := apiHandlers{engine, collections}
 
 	m := mux.NewRouter()
 	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, m))
@@ -91,14 +112,19 @@ func serve(engine Engine, port int) {
 
 type apiHandlers struct {
 	engine Engine
+	colls  Collections
 }
 
 func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-	collection := vars["collection"]
+	coll, err := ah.getCollection(vars["collection"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	found, art, err := ah.engine.Load(collection, id)
+	found, art, err := ah.engine.Load(coll, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -114,7 +140,11 @@ func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
 
 func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	collection := vars["collection"]
+	coll, err := ah.getCollection(vars["collection"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	errCh := make(chan error, 2)
 	docCh := make(chan Document)
@@ -149,7 +179,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer wg.Done()
 			for doc := range docCh {
-				err := ah.engine.Write(collection, getID(doc), doc)
+				err := ah.engine.Write(coll, getID(coll, doc), doc)
 				if err != nil {
 					errCh <- err
 					return
@@ -171,12 +201,8 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getID(doc Document) string {
-	// TODO: obviously this should be parameterised
-	if id, ok := doc["uuid"].(string); ok {
-		return id
-	}
-	if id, ok := doc["id"].(string); ok {
+func getID(coll Collection, doc Document) string {
+	if id, ok := doc[coll.idPropertyName].(string); ok {
 		return id
 	}
 	panic("no id")
@@ -185,41 +211,61 @@ func getID(doc Document) string {
 func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-	collection := vars["collection"]
 
-	var doc Document
-	dec := json.NewDecoder(r.Body)
-	err := dec.Decode(&doc)
+	coll, err := ah.getCollection(vars["collection"])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if getID(doc) != id {
+
+	var doc Document
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&doc); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if getID(coll, doc) != id {
 		http.Error(w, "id does not match", http.StatusBadRequest)
 		return
 	}
 
-	err = ah.engine.Write(collection, id, doc)
+	err = ah.engine.Write(coll, id, doc)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("write failed:\n%v\n", err), http.StatusInternalServerError)
 		return
 	}
 }
 
+func (ah *apiHandlers) getCollection(name string) (Collection, error) {
+	coll := ah.colls[name]
+	if coll == (Collection{}) {
+		return coll, fmt.Errorf("unknown collection %s", name)
+	}
+	return coll, nil
+}
+
 func (ah *apiHandlers) dropHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	collection := vars["collection"]
-	ah.engine.Drop(collection)
+	coll, err := ah.getCollection(vars["collection"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ah.engine.Drop(coll)
 }
 
 func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	collection := vars["collection"]
+	coll, err := ah.getCollection(vars["collection"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	enc := json.NewEncoder(w)
 	stop := make(chan struct{})
 	defer close(stop)
-	all, err := ah.engine.All(collection, stop)
+	all, err := ah.engine.All(coll, stop)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -232,6 +278,10 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 
 func (ah *apiHandlers) countHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	collection := vars["collection"]
-	fmt.Fprintf(w, "%d\n", ah.engine.Count(collection))
+	coll, err := ah.getCollection(vars["collection"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	fmt.Fprintf(w, "%d\n", ah.engine.Count(coll))
 }
