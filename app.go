@@ -31,7 +31,6 @@ func main() {
 		url := cmd.StringArg("URL", "", "elastic search endpoint url")
 		indexName := cmd.StringOpt("index-name", "store", "elastic search index name")
 		cmd.Action = func() {
-			println(*url)
 			serve(NewElasticEngine(*url, *indexName), *port)
 		}
 
