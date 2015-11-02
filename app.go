@@ -38,8 +38,9 @@ func main() {
 
 	app.Command("mongo", "use the mongodb backend", func(cmd *cli.Cmd) {
 		hostports := cmd.StringArg("HOSTS", "", "hostname1:port1,hostname2:port2...")
+		dbname := cmd.StringOpt("dbname", "store", "database name")
 		cmd.Action = func() {
-			serve(NewMongoEngine("store", *hostports), *port)
+			serve(NewMongoEngine(*dbname, *hostports), *port)
 		}
 
 	})
