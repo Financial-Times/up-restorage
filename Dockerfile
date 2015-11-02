@@ -2,7 +2,7 @@ FROM alpine
 
 ADD . /
 RUN apk add --update bash \
-  && apk --update add go git\
+  && apk --update add go git bzr\
   && REPO_PATH="github.com/Financial-Times/up-restorage" \
   && export GOPATH=/gopath \
   && mkdir -p $GOPATH/src/github.com/Financial-Times \
@@ -11,7 +11,7 @@ RUN apk add --update bash \
   && go get \
   && go test \
   && go build ${REPO_PATH} \
-  && apk del go git \
+  && apk del go git bzr \
   && rm -rf $GOPATH /var/cache/apk/*
 
 EXPOSE 8080
