@@ -116,13 +116,14 @@ func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan 
 		defer close(cont)
 		coll := eng.session.DB(eng.dbName).C(collection.name)
 		iter := coll.Find(nil).Iter()
-		var result Document
-		for iter.Next(&result) {
-			cleanup(result)
+		result := &Document{}
+		for iter.Next(result) {
+			cleanup(*result)
 			select {
 			case <-stopchan:
 				break
-			case cont <- result:
+			case cont <- *result:
+				result = &Document{}
 			}
 		}
 		if err := iter.Close(); err != nil {
