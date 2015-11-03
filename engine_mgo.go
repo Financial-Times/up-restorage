@@ -52,7 +52,7 @@ func (eng *mongoEngine) EnsureIndexes(collection Collection) {
 		Sparse:     false,
 	})
 	if err != nil {
-		panic(err)
+		log.Printf("failed to create index by %s on %s : %v\n", collection.name, collection.idPropertyName, err.Error())
 	}
 
 }
