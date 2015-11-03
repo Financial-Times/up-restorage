@@ -9,6 +9,7 @@ type Engine interface {
 	Write(c Collection, id string, doc Document) error
 	Count(c Collection) int
 	All(c Collection, stopchan chan struct{}) (chan Document, error)
+	Delete(c Collection, id string) error
 	Drop(c Collection)
 	Close()
 }

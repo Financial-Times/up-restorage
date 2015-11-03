@@ -76,12 +76,20 @@ func serve(engine Engine, collections Collections, port int) {
 	m := mux.NewRouter()
 	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, m))
 
+	// count
 	m.HandleFunc("/{collection}/_count", ah.countHandler).Methods("GET")
+
+	// get by id and get all
 	m.HandleFunc("/{collection}/{id}", ah.idReadHandler).Methods("GET")
-	m.HandleFunc("/{collection}/{id}", ah.idWriteHandler).Methods("PUT")
-	m.HandleFunc("/{collection}/", ah.dropHandler).Methods("DELETE")
-	m.HandleFunc("/{collection}/", ah.putAllHandler).Methods("PUT")
 	m.HandleFunc("/{collection}/", ah.dumpAll).Methods("GET")
+
+	// put by id and put all
+	m.HandleFunc("/{collection}/{id}", ah.idWriteHandler).Methods("PUT")
+	m.HandleFunc("/{collection}/", ah.putAllHandler).Methods("PUT")
+
+	// delete by id and delete all
+	m.HandleFunc("/{collection}/{id}", ah.idDeleteHandler).Methods("DELETE")
+	m.HandleFunc("/{collection}/", ah.dropHandler).Methods("DELETE")
 
 	go func() {
 		fmt.Printf("listening on %d\n", port)
@@ -232,6 +240,23 @@ func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 	err = ah.engine.Write(coll, id, doc)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("write failed:\n%v\n", err), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (ah *apiHandlers) idDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	coll, err := ah.getCollection(vars["collection"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = ah.engine.Delete(coll, id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("delete failed:\n%v\n", err), http.StatusInternalServerError)
 		return
 	}
 }

@@ -100,6 +100,15 @@ func (eng *mongoEngine) Load(collection Collection, id string) (bool, Document, 
 	return true, content, nil
 }
 
+func (eng *mongoEngine) Delete(collection Collection, id string) error {
+	c := eng.session.DB(eng.dbName).C(collection.name)
+	err := c.Remove(bson.M{collection.idPropertyName: id})
+	if err != mgo.ErrNotFound {
+		return err
+	}
+	return nil
+}
+
 func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan Document, error) {
 	cont := make(chan Document)
 

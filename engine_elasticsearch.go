@@ -73,6 +73,28 @@ func (ee *elasticEngine) Write(collection Collection, id string, cont Document) 
 	return nil
 }
 
+func (ee *elasticEngine) Delete(collection Collection, id string) error {
+	if id == "" {
+		return errors.New("missing id")
+	}
+
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id), nil)
+	if err != nil {
+		panic(err)
+	}
+	resp, err := ee.client.Do(req)
+	if err != nil {
+		fmt.Printf("e: %v\n", err)
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 400 && resp.StatusCode != 404 {
+		return fmt.Errorf("delete request failed with status %d", resp.Status)
+	}
+
+	return nil
+}
+
 func (ee *elasticEngine) Count(collection Collection) int {
 	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/_count", ee.baseURL, ee.indexName, collection.name))
 	if err != nil {
