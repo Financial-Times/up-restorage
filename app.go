@@ -77,7 +77,7 @@ func serve(engine Engine, collections Collections, port int) {
 	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, m))
 
 	// count
-	m.HandleFunc("/{collection}/_count", ah.countHandler).Methods("GET")
+	m.HandleFunc("/{collection}/__count", ah.countHandler).Methods("GET")
 
 	// get by id and get all
 	m.HandleFunc("/{collection}/{id}", ah.idReadHandler).Methods("GET")
