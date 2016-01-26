@@ -134,6 +134,29 @@ func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan 
 	return cont, nil
 }
 
+func (eng mongoEngine) Ids(collection Collection, stopchan chan struct{}) (chan string, error) {
+	ids := make(chan string)
+
+	go func() {
+		defer close(ids)
+		coll := eng.session.DB(eng.dbName).C(collection.name)
+		iter := coll.Find(nil).Select(bson.M{collection.idPropertyName: true}).Iter()
+		var result map[string]string
+		for iter.Next(&result) {
+			select {
+			case <-stopchan:
+				break
+			case ids <- result[collection.idPropertyName]:
+			}
+		}
+		if err := iter.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
+	return ids, nil
+}
+
 func cleanup(doc Document) {
 	delete(doc, "_id")
 }

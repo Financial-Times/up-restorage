@@ -148,6 +148,10 @@ func (ee elasticEngine) All(collection Collection, closechan chan struct{}) (cha
 	return ee.query(collection, q, closechan)
 }
 
+func (ee elasticEngine) Ids(collection Collection, stopchan chan struct{}) (chan string, error) {
+	panic("not implemented")
+}
+
 func (ee elasticEngine) query(collection Collection, q string, closechan chan struct{}) (chan Document, error) {
 	cont := make(chan Document)
 

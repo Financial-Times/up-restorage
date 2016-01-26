@@ -79,6 +79,9 @@ func serve(engine Engine, collections Collections, port int) {
 	// count
 	m.HandleFunc("/{collection}/__count", ah.countHandler).Methods("GET")
 
+	// {"id":"e1cd2aa4-c5bb-46b2-b677-846640f22428"}{"id":"f8e46a87-5514-48fb-a6b2-f82d3cf11e92"} style response
+	m.HandleFunc("/{collection}/__ids", ah.idsHandler).Methods("GET")
+
 	// get by id and get all
 	m.HandleFunc("/{collection}/{id}", ah.idReadHandler).Methods("GET")
 	m.HandleFunc("/{collection}/", ah.dumpAll).Methods("GET")
@@ -298,6 +301,31 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 	for doc := range all {
 		enc.Encode(doc)
 		fmt.Fprint(w, "\n")
+	}
+}
+
+func (ah *apiHandlers) idsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	coll, err := ah.getCollection(vars["collection"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	enc := json.NewEncoder(w)
+	stop := make(chan struct{})
+	defer close(stop)
+	all, err := ah.engine.Ids(coll, stop)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := struct {
+		ID string `json:"id"`
+	}{}
+	for docId := range all {
+		id.ID = docId
+		enc.Encode(id)
 	}
 }
 
