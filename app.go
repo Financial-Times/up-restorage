@@ -9,9 +9,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"runtime/pprof"
 	"strings"
 	"sync"
 )
@@ -35,13 +35,6 @@ func parseCollections(mappings string) Collections {
 }
 
 func main() {
-
-	f, err := os.Create("/tmp/cpuprof")
-	if err != nil {
-		panic(err)
-	}
-	pprof.StartCPUProfile(f)
-	defer pprof.StopCPUProfile()
 
 	app := cli.App("restorage", "A RESTful storage API with pluggable backends")
 	port := app.IntOpt("port", 8080, "Port to listen on")
@@ -109,14 +102,6 @@ func serve(engine Engine, collections Collections, port int) {
 	<-c
 	println("exiting")
 	engine.Close()
-
-	f, err := os.Create("/tmp/memprof")
-	if err != nil {
-		panic(err)
-	}
-
-	pprof.WriteHeapProfile(f)
-	f.Close()
 
 	return
 }
