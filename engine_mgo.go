@@ -140,9 +140,6 @@ func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan 
 
 func (eng mongoEngine) Ids(collection Collection, stopchan chan struct{}) (chan string, error) {
 	ids := make(chan string)
-	fmt.Println("Start")
-	fmt.Printf("config: %# v\n", pretty.Formatter(collection))
-
 	go func() {
 		defer close(ids)
 		coll := eng.session.DB(eng.dbName).C(collection.name)
@@ -159,7 +156,6 @@ func (eng mongoEngine) Ids(collection Collection, stopchan chan struct{}) (chan 
 			panic(err)
 		}
 	}()
-	fmt.Println("End")
 	return ids, nil
 }
 
