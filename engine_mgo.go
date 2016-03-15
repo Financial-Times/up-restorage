@@ -2,9 +2,13 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"log"
+
+	"github.com/kr/pretty"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"log"
+	"github.com/pborman/uuid"
 )
 
 type mongoEngine struct {
@@ -136,25 +140,38 @@ func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan 
 
 func (eng mongoEngine) Ids(collection Collection, stopchan chan struct{}) (chan string, error) {
 	ids := make(chan string)
+	fmt.Println("Start")
+	fmt.Printf("config: %# v\n", pretty.Formatter(collection))
 
 	go func() {
 		defer close(ids)
 		coll := eng.session.DB(eng.dbName).C(collection.name)
 		iter := coll.Find(nil).Select(bson.M{collection.idPropertyName: true}).Iter()
-		var result map[string]string
+		var result map[string]interface{}
 		for iter.Next(&result) {
 			select {
 			case <-stopchan:
 				break
-			case ids <- result[collection.idPropertyName]:
+			case ids <- getUUIDString(result[collection.idPropertyName]):
 			}
 		}
 		if err := iter.Close(); err != nil {
 			panic(err)
 		}
 	}()
-
+	fmt.Println("End")
 	return ids, nil
+}
+
+func getUUIDString(uuidValue interface{}) string {
+	if uuidString, ok := uuidValue.(string); ok {
+		return uuidString
+	} else if binaryUUID, ok := uuidValue.(bson.Binary); ok {
+		return uuid.UUID(binaryUUID.Data).String()
+	} else{
+		fmt.Printf("UUID field is in an unknown format!\n %# v", pretty.Formatter(uuidValue))
+		return ""
+	}
 }
 
 func cleanup(doc Document) {
