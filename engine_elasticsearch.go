@@ -49,28 +49,38 @@ func (ee *elasticEngine) Write(collection Collection, id string, cont Document) 
 		return errors.New("missing id")
 	}
 
+	doneWrite := make(chan struct{})
+	writeErr := make(chan error, 1)
+
 	r, w := io.Pipe()
 	go func() {
 		je := json.NewEncoder(w)
 		err := je.Encode(cont)
 		if err != nil {
-			panic(err)
+			writeErr <- err
 		}
 		w.Close()
+		close(doneWrite)
 	}()
 
-	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id), r)
+	u := fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id)
+	req, err := http.NewRequest("PUT", u, r)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	resp, err := ee.client.Do(req)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	io.Copy(ioutil.Discard, resp.Body)
 	resp.Body.Close()
 
-	return nil
+	select {
+	case e := <-writeErr:
+		return e
+	case <-doneWrite:
+		return nil
+	}
 }
 
 func (ee *elasticEngine) Delete(collection Collection, id string) error {
