@@ -39,6 +39,7 @@ func main() {
 	app := cli.App("restorage", "A RESTful storage API with pluggable backends")
 	port := app.IntOpt("port", 8080, "Port to listen on")
 	idMap := app.StringOpt("id-map", "test1:uuid,test2:id,...", "Mapping of collection name to identifier property name")
+	isBinaryUUID := app.BoolOpt("binary-uuid", false, "Is the configured id in a binary format?")
 
 	app.Command("elastic", "use the elastic search backend", func(cmd *cli.Cmd) {
 		url := cmd.StringArg("URL", "", "elastic search endpoint url")
@@ -54,7 +55,7 @@ func main() {
 		dbname := cmd.StringOpt("dbname", "store", "database name")
 		cmd.Action = func() {
 			colls := parseCollections(*idMap)
-			serve(NewMongoEngine(*dbname, colls, *hostports), colls, *port)
+			serve(NewMongoEngine(*dbname, colls, *hostports, *isBinaryUUID), colls, *port)
 		}
 
 	})
