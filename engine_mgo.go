@@ -112,6 +112,9 @@ func (eng *mongoEngine) Load(collection Collection, id string) (bool, Document, 
 		return false, Document{}, err
 	}
 	cleanup(content)
+	if eng.isBinaryId {
+		content["uuid"] = id
+	}
 	return true, content, nil
 }
 
