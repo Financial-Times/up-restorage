@@ -2,18 +2,20 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log"
 
+	"fmt"
+
 	"github.com/kr/pretty"
+	"github.com/pborman/uuid"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"github.com/pborman/uuid"
 )
 
 type mongoEngine struct {
-	session *mgo.Session
-	dbName  string
+	session    *mgo.Session
+	dbName     string
+	isBinaryId bool
 }
 
 func (eng mongoEngine) Close() {
@@ -21,7 +23,7 @@ func (eng mongoEngine) Close() {
 }
 
 // NewMongoEngine returns an Engine based on a mongodb database backend
-func NewMongoEngine(dbName string, collections Collections, hostPorts string) Engine {
+func NewMongoEngine(dbName string, collections Collections, hostPorts string, isBinaryId bool) Engine {
 	log.Printf("connecting to mongodb '%s'\n", hostPorts)
 	s, err := mgo.Dial(hostPorts)
 	if err != nil {
@@ -29,8 +31,9 @@ func NewMongoEngine(dbName string, collections Collections, hostPorts string) En
 	}
 	s.SetMode(mgo.Monotonic, true)
 	eng := &mongoEngine{
-		session: s,
-		dbName:  dbName,
+		session:    s,
+		dbName:     dbName,
+		isBinaryId: isBinaryId,
 	}
 
 	for _, coll := range collections {
@@ -93,7 +96,15 @@ func (eng *mongoEngine) Count(collection Collection) int {
 func (eng *mongoEngine) Load(collection Collection, id string) (bool, Document, error) {
 	c := eng.session.DB(eng.dbName).C(collection.name)
 	var content Document
-	err := c.Find(bson.M{collection.idPropertyName: id}).One(&content)
+
+	var err error
+	if eng.isBinaryId {
+		binaryId := bson.Binary{Kind: 0x04, Data: []byte(uuid.Parse(id))}
+		err = c.Find(bson.M{collection.idPropertyName: binaryId}).One(&content)
+	} else {
+		err = c.Find(bson.M{collection.idPropertyName: id}).One(&content)
+	}
+
 	if err == mgo.ErrNotFound {
 		return false, Document{}, nil
 	}
@@ -162,9 +173,9 @@ func (eng mongoEngine) Ids(collection Collection, stopchan chan struct{}) (chan 
 func getUUIDString(uuidValue interface{}) string {
 	if uuidString, ok := uuidValue.(string); ok {
 		return uuidString
-	} else if binaryUUID, ok := uuidValue.(bson.Binary); ok {
-		return uuid.UUID(binaryUUID.Data).String()
-	} else{
+	} else if binaryId, ok := uuidValue.(bson.Binary); ok {
+		return uuid.UUID(binaryId.Data).String()
+	} else {
 		fmt.Printf("UUID field is in an unknown format!\n %# v", pretty.Formatter(uuidValue))
 		return ""
 	}

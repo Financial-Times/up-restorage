@@ -52,9 +52,10 @@ func main() {
 	app.Command("mongo", "use the mongodb backend", func(cmd *cli.Cmd) {
 		hostports := cmd.StringArg("HOSTS", "", "hostname1:port1,hostname2:port2,...")
 		dbname := cmd.StringOpt("dbname", "store", "database name")
+		isBinaryId := cmd.BoolOpt("binary-identity", false, "Is the configured id in a binary format?")
 		cmd.Action = func() {
 			colls := parseCollections(*idMap)
-			serve(NewMongoEngine(*dbname, colls, *hostports), colls, *port)
+			serve(NewMongoEngine(*dbname, colls, *hostports, *isBinaryId), colls, *port)
 		}
 
 	})
