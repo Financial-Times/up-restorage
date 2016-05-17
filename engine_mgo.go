@@ -113,7 +113,7 @@ func (eng *mongoEngine) Load(collection Collection, id string) (bool, Document, 
 	}
 	cleanup(content)
 	if eng.isBinaryId {
-		content["uuid"] = id
+		content[collection.idPropertyName] = id
 	}
 	return true, content, nil
 }
