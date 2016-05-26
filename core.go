@@ -11,12 +11,13 @@ type Engine interface {
 	All(c Collection, stopchan chan struct{}) (chan Document, error)
 	Ids(c Collection, stopchan chan struct{}) (chan string, error)
 	Delete(c Collection, id string) error
-	Drop(c Collection)
+	Drop(c Collection) (bool, error)
 	Close()
 }
 
 var (
 	ErrInvalidQuery = errors.New("invalid query")
+	ErrNotFound = errors.New("Not found")
 )
 
 type Document map[string]interface{}

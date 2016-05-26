@@ -1,1 +1,8 @@
-up-restorage
+up-restorage*
+*.exe*
+*.log
+*.html
+*.iml
+*coverage.*
+.idea/
+/project
