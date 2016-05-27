@@ -15,10 +15,10 @@ PUT http://localhost:8765/organisations/013f7fa7-aa26-3e20-84f1-fb8e5f7383ff
 ```
 {
 "uuid": "013f7fa7-aa26-3e20-84f1-fb8e5f7383ff",
-"properName": "Barclays Plc",
+"properName": "Berkley Plc",
 "identifiers": [
 {
-"authority": "http://api.ft.com/system/FACTSET-EDM",
+"authority": "http://api.ft.com/system/EXTERNAL-EDM",
 "identifierValue": "05H4C8-E"
 },
 {
@@ -44,23 +44,23 @@ PUT http://localhost:8080/people/
 ```
 {
 	"uuid": "38355379-13e8-3d7f-8567-5a6d2b7f9066",
-	"name": "Rajeev Chandrasekhar",
+	"name": "Hari Krishna",
 	"salutation": "Mr.",
 	"identifiers": [{
-		"authority": "http://api.ft.com/system/FACTSET-PPL",
+		"authority": "http://api.ft.com/system/EXTERNAL-PPL",
 		"identifierValue": "0751XR-E"
 	}, {
 		"authority": "http://api.ft.com/system/FT-TME",
 		"identifierValue": "M2I1OWZlYmEtNGRlNC00YjJmLTg2MTYtZDk5NDM2OGVjZWM4-UE4="
 	}],
 	"aliases": [
-		"Rajeev Chandrasekhar"
+		"Hari Rama"
 	]
 }
 
 {
 	"uuid": "f18c1d86-e188-3303-a68f-cffc28d51d13",
-	"name": "Rajshree Pathy",
+	"name": "Siddhartha Gautama",
 	"birthYear": 1956,
 	"salutation": "Ms.",
 	"identifiers": [{
@@ -71,13 +71,13 @@ PUT http://localhost:8080/people/
 		"identifierValue": "06GRHC-E"
 	}],
 	"aliases": [
-		"Rajshree Pathy"
+		"Budda"
 	]
 }
 
 {
 	"uuid": "12221354-1fe8-34c1-a6ce-8a7a9175f605",
-	"name": "Vincent C. Gray",
+	"name": "Vincent van Gogh",
 	"salutation": "Mr.",
 	"identifiers": [{
 		"authority": "http://api.ft.com/system/FT-TME",
