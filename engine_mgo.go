@@ -70,6 +70,7 @@ func (eng *mongoEngine) Drop(collection Collection) (bool, error){
 		log.Printf("failed to drop collection")
 	}
 	eng.EnsureIndexes(collection)
+	//TODO implement error handling and whether drop is successful or not
 	return true, nil
 }
 

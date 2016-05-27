@@ -18,7 +18,6 @@ type elasticEngine struct {
 
 func NewElasticEngine(elasticURL string, indexName string) Engine {
 	transport := &http.Transport{MaxIdleConnsPerHost: 30}
-	fmt.Printf("elasticUrl = %s, indexName=%s", elasticURL, indexName)
 	e := &elasticEngine{
 		client:    &http.Client{Transport: transport},
 		baseURL:   elasticURL,
