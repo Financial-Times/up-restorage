@@ -46,7 +46,6 @@ func main() {
 		cmd.Action = func() {
 			serve(NewElasticEngine(*url, *indexName), parseCollections(*idMap), *port)
 		}
-
 	})
 
 	app.Command("mongo", "use the mongodb backend", func(cmd *cli.Cmd) {
@@ -57,7 +56,6 @@ func main() {
 			colls := parseCollections(*idMap)
 			serve(NewMongoEngine(*dbname, colls, *hostports, *isBinaryId), colls, *port)
 		}
-
 	})
 
 	app.Run(os.Args)
@@ -262,15 +260,27 @@ func (ah *apiHandlers) dropHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	coll, err := ah.getCollection(vars["collection"])
 	if err != nil {
+
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	ah.engine.Drop(coll)
+
+	ok, err := ah.engine.Drop(coll)
+
+	if err !=nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 }
 
 func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	coll, err := ah.getCollection(vars["collection"])
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -281,7 +291,14 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 	defer close(stop)
 	all, err := ah.engine.All(coll, stop)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		switch {
+		case err == ErrInvalidQuery:
+			w.WriteHeader(http.StatusBadRequest)
+		case err == ErrNotFound:
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 	for doc := range all {

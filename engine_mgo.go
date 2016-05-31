@@ -64,12 +64,14 @@ func (eng *mongoEngine) EnsureIndexes(collection Collection) {
 
 }
 
-func (eng *mongoEngine) Drop(collection Collection) {
+func (eng *mongoEngine) Drop(collection Collection) (bool, error){
 	err := eng.session.DB(eng.dbName).C(collection.name).DropCollection()
 	if err != nil {
 		log.Printf("failed to drop collection")
 	}
 	eng.EnsureIndexes(collection)
+	//TODO implement error handling and whether drop is successful or not
+	return true, nil
 }
 
 func (eng *mongoEngine) Write(collection Collection, id string, cont Document) error {
