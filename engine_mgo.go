@@ -86,13 +86,8 @@ func (eng *mongoEngine) Write(collection Collection, id string, cont Document) e
 	return nil
 }
 
-func (eng *mongoEngine) Count(collection Collection) int {
-	coll := eng.session.DB(eng.dbName).C(collection.name)
-	count, err := coll.Count()
-	if err != nil {
-		panic(err)
-	}
-	return count
+func (eng *mongoEngine) Count(collection Collection) (int, error) {
+	return eng.session.DB(eng.dbName).C(collection.name).Count()
 }
 
 func (eng *mongoEngine) Load(collection Collection, id string) (bool, Document, error) {

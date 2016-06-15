@@ -339,5 +339,10 @@ func (ah *apiHandlers) countHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fmt.Fprintf(w, "%d\n", ah.engine.Count(coll))
+	count, err := ah.engine.Count(coll)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprintf(w, "%d\n", count)
 }

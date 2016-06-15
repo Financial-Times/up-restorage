@@ -112,7 +112,7 @@ func (ee *elasticEngine) Delete(collection Collection, id string) error {
 	return nil
 }
 
-func (ee *elasticEngine) Count(collection Collection) int {
+func (ee *elasticEngine) Count(collection Collection) (int, error) {
 	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/_count", ee.baseURL, ee.indexName, collection.name))
 	if err != nil {
 		panic(err)
@@ -123,12 +123,12 @@ func (ee *elasticEngine) Count(collection Collection) int {
 		var result esCountResult
 		err := dec.Decode(&result)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return result.Count
+		return result.Count, nil
 	}
 	if res.StatusCode == 404 {
-		return 0
+		return 0, nil
 	}
 	panic(res.StatusCode)
 }
@@ -164,7 +164,11 @@ type esGetResult struct {
 }
 
 func (ee elasticEngine) All(collection Collection, closechan chan struct{}) (chan Document, error) {
-	q := fmt.Sprintf("{\"query\":{\"match_all\": {}}, \"fields\":[], \"size\": %d,  \"from\": 0}", ee.Count(collection)+1000)
+	count, err := ee.Count(collection)
+	if err != nil {
+		return nil, err
+	}
+	q := fmt.Sprintf("{\"query\":{\"match_all\": {}}, \"fields\":[], \"size\": %d,  \"from\": 0}", count+1000)
 	return ee.query(collection, q, closechan)
 }
 
