@@ -22,8 +22,6 @@ var (
 
 type Document map[string]interface{}
 
-type Collections map[string]Collection
-
 type Collection struct {
 	name           string
 	idPropertyName string

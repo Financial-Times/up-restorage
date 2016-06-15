@@ -16,7 +16,7 @@ import (
 	"sync"
 )
 
-func parseCollections(mappings string) Collections {
+func parseCollections(mappings string) map[string]Collection {
 	idMapping := make(map[string]Collection)
 	for _, mapping := range strings.Split(mappings, ",") {
 		kv := strings.Split(mapping, ":")
@@ -62,7 +62,7 @@ func main() {
 
 }
 
-func serve(engine Engine, collections Collections, port int) {
+func serve(engine Engine, collections map[string]Collection, port int) {
 	ah := apiHandlers{engine, collections}
 
 	m := mux.NewRouter()
@@ -107,7 +107,7 @@ func serve(engine Engine, collections Collections, port int) {
 
 type apiHandlers struct {
 	engine Engine
-	colls  Collections
+	colls  map[string]Collection
 }
 
 func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
