@@ -137,7 +137,7 @@ type esCountResult struct {
 	Count int `json:"count"`
 }
 
-func (ee *elasticEngine) Load(collection Collection, id string) (bool, Document, error) {
+func (ee *elasticEngine) Read(collection Collection, id string) (bool, Document, error) {
 	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id))
 	if err != nil {
 		panic(err)
@@ -205,7 +205,7 @@ func (ee elasticEngine) query(collection Collection, q string, closechan chan st
 		}
 		for _, h := range result.Hits.Hits {
 			id := h.ID
-			found, c, err := ee.Load(collection, id)
+			found, c, err := ee.Read(collection, id)
 			if err != nil {
 				panic(err)
 			}

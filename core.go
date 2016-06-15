@@ -5,12 +5,12 @@ import (
 )
 
 type Engine interface {
-	Load(c Collection, id string) (bool, Document, error)
 	Write(c Collection, id string, doc Document) error
+	Read(c Collection, id string) (bool, Document, error)
+	Delete(c Collection, id string) error
 	Count(c Collection) (int, error)
 	All(c Collection, stopchan chan struct{}) (chan Document, error)
 	Ids(c Collection, stopchan chan struct{}) (chan string, error)
-	Delete(c Collection, id string) error
 	Drop(c Collection) (bool, error)
 	Close()
 }

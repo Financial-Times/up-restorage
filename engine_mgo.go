@@ -90,7 +90,7 @@ func (eng *mongoEngine) Count(collection Collection) (int, error) {
 	return eng.session.DB(eng.dbName).C(collection.name).Count()
 }
 
-func (eng *mongoEngine) Load(collection Collection, id string) (bool, Document, error) {
+func (eng *mongoEngine) Read(collection Collection, id string) (bool, Document, error) {
 	c := eng.session.DB(eng.dbName).C(collection.name)
 	var content Document
 

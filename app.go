@@ -119,7 +119,7 @@ func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found, art, err := ah.engine.Load(coll, id)
+	found, art, err := ah.engine.Read(coll, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
