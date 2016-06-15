@@ -16,10 +16,9 @@ type elasticEngine struct {
 	indexName string
 }
 
-func NewElasticEngine(elasticURL string, indexName string) Engine {
-	transport := &http.Transport{MaxIdleConnsPerHost: 30}
+func NewElasticEngine(elasticURL string, indexName string, client *http.Client) Engine {
 	e := &elasticEngine{
-		client:    &http.Client{Transport: transport},
+		client:    client,
 		baseURL:   elasticURL,
 		indexName: indexName,
 	}

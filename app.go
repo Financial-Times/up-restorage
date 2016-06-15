@@ -44,7 +44,8 @@ func main() {
 		url := cmd.StringArg("URL", "", "elastic search endpoint url")
 		indexName := cmd.StringOpt("index-name", "store", "elastic search index name")
 		cmd.Action = func() {
-			serve(NewElasticEngine(*url, *indexName), parseCollections(*idMap), *port)
+			client := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 30}}
+			serve(NewElasticEngine(*url, *indexName, client), parseCollections(*idMap), *port)
 		}
 	})
 
