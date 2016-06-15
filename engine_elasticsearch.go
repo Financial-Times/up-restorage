@@ -30,7 +30,7 @@ func NewElasticEngine(elasticURL string, indexName string) Engine {
 	return e
 }
 
-func (ee *elasticEngine) Drop(collection Collection) (bool, error){
+func (ee *elasticEngine) Drop(collection Collection) (bool, error) {
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s?_type=%s", ee.baseURL, ee.indexName, collection.name), nil)
 	if err != nil {
 		panic(err)

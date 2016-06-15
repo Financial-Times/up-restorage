@@ -64,7 +64,7 @@ func (eng *mongoEngine) EnsureIndexes(collection Collection) {
 
 }
 
-func (eng *mongoEngine) Drop(collection Collection) (bool, error){
+func (eng *mongoEngine) Drop(collection Collection) (bool, error) {
 	err := eng.session.DB(eng.dbName).C(collection.name).DropCollection()
 	if err != nil {
 		log.Printf("failed to drop collection")

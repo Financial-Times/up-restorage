@@ -17,7 +17,7 @@ type Engine interface {
 
 var (
 	ErrInvalidQuery = errors.New("invalid query")
-	ErrNotFound = errors.New("Not found")
+	ErrNotFound     = errors.New("Not found")
 )
 
 type Document map[string]interface{}

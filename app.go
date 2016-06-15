@@ -267,7 +267,7 @@ func (ah *apiHandlers) dropHandler(w http.ResponseWriter, r *http.Request) {
 
 	ok, err := ah.engine.Drop(coll)
 
-	if err !=nil {
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
