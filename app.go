@@ -46,7 +46,14 @@ func main() {
 		indexName := cmd.StringOpt("index-name", "store", "elastic search index name")
 		cmd.Action = func() {
 			client := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 30}}
-			serve(NewElasticEngine(*url, *indexName, client), parseCollections(*idMap), *port)
+
+			engs := make(map[string]Engine)
+			for _, c := range parseCollections(*idMap) {
+				e := NewElasticEngine(*url, *indexName, c.name, c.idPropertyName, client)
+				engs[c.name] = e
+			}
+
+			serve(engs, *port)
 		}
 	})
 
@@ -55,14 +62,20 @@ func main() {
 		dbname := cmd.StringOpt("dbname", "store", "database name")
 		isBinaryId := cmd.BoolOpt("binary-identity", false, "Is the configured id in a binary format?")
 		cmd.Action = func() {
-			colls := parseCollections(*idMap)
 			log.Printf("connecting to mongodb '%s'\n", *hostports)
 			s, err := mgo.Dial(*hostports)
 			if err != nil {
 				panic(err)
 			}
 			s.SetMode(mgo.Monotonic, true)
-			serve(NewMongoEngine(*dbname, colls, *isBinaryId, s), colls, *port)
+
+			engs := make(map[string]Engine)
+			for _, c := range parseCollections(*idMap) {
+				e := NewMongoEngine(*dbname, c.name, c.idPropertyName, *isBinaryId, s)
+				engs[c.name] = e
+			}
+
+			serve(engs, *port)
 		}
 	})
 
@@ -70,8 +83,8 @@ func main() {
 
 }
 
-func serve(engine Engine, collections map[string]CollectionSettings, port int) {
-	ah := apiHandlers{engine, collections}
+func serve(engines map[string]Engine, port int) {
+	ah := apiHandlers{engines}
 
 	m := mux.NewRouter()
 	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, m))
@@ -108,14 +121,15 @@ func serve(engine Engine, collections map[string]CollectionSettings, port int) {
 	// wait for ctrl-c
 	<-c
 	println("exiting")
-	engine.Close()
+	for _, engine := range engines {
+		engine.Close()
+	}
 
 	return
 }
 
 type apiHandlers struct {
-	engine Engine
-	colls  map[string]CollectionSettings
+	engines map[string]Engine
 }
 
 func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +141,7 @@ func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found, art, err := ah.engine.Read(coll, id)
+	found, art, err := coll.Read(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -182,7 +196,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer wg.Done()
 			for doc := range docCh {
-				err := ah.engine.Write(coll, getID(coll, doc), doc)
+				err := coll.Write(doc)
 				if err != nil {
 					errCh <- err
 					return
@@ -204,8 +218,8 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getID(coll CollectionSettings, doc Document) string {
-	if id, ok := doc[coll.idPropertyName].(string); ok {
+func getID(idPropertyName string, doc Document) string {
+	if id, ok := doc[idPropertyName].(string); ok {
 		return id
 	}
 	panic("no id")
@@ -227,12 +241,12 @@ func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if getID(coll, doc) != id {
+	if getID(coll.IDPropertyName(), doc) != id {
 		http.Error(w, "id does not match", http.StatusBadRequest)
 		return
 	}
 
-	err = ah.engine.Write(coll, id, doc)
+	err = coll.Write(doc)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("write failed:\n%v\n", err), http.StatusInternalServerError)
 		return
@@ -249,16 +263,16 @@ func (ah *apiHandlers) idDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = ah.engine.Delete(coll, id)
+	err = coll.Delete(id)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("delete failed:\n%v\n", err), http.StatusInternalServerError)
 		return
 	}
 }
 
-func (ah *apiHandlers) getCollection(name string) (CollectionSettings, error) {
-	coll := ah.colls[name]
-	if coll == (CollectionSettings{}) {
+func (ah *apiHandlers) getCollection(name string) (Engine, error) {
+	coll, ok := ah.engines[name]
+	if !ok {
 		return coll, fmt.Errorf("unknown collection %s", name)
 	}
 	return coll, nil
@@ -273,7 +287,7 @@ func (ah *apiHandlers) dropHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ok, err := ah.engine.Drop(coll)
+	ok, err := coll.Drop()
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -297,7 +311,7 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	stop := make(chan struct{})
 	defer close(stop)
-	all, err := ah.engine.All(coll, stop)
+	all, err := coll.All(stop)
 	if err != nil {
 		switch {
 		case err == ErrInvalidQuery:
@@ -326,7 +340,7 @@ func (ah *apiHandlers) idsHandler(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	stop := make(chan struct{})
 	defer close(stop)
-	all, err := ah.engine.Ids(coll, stop)
+	all, err := coll.Ids(stop)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -347,7 +361,7 @@ func (ah *apiHandlers) countHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	count, err := ah.engine.Count(coll)
+	count, err := coll.Count()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
