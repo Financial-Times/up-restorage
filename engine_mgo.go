@@ -23,13 +23,7 @@ func (eng mongoEngine) Close() {
 }
 
 // NewMongoEngine returns an Engine based on a mongodb database backend
-func NewMongoEngine(dbName string, collections map[string]Collection, hostPorts string, isBinaryId bool) Engine {
-	log.Printf("connecting to mongodb '%s'\n", hostPorts)
-	s, err := mgo.Dial(hostPorts)
-	if err != nil {
-		panic(err)
-	}
-	s.SetMode(mgo.Monotonic, true)
+func NewMongoEngine(dbName string, collections map[string]Collection, isBinaryId bool, s *mgo.Session) Engine {
 	eng := &mongoEngine{
 		session:    s,
 		dbName:     dbName,

@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/jawher/mow.cli"
+	"gopkg.in/mgo.v2"
 	"io"
 	"log"
 	"net/http"
@@ -55,7 +56,13 @@ func main() {
 		isBinaryId := cmd.BoolOpt("binary-identity", false, "Is the configured id in a binary format?")
 		cmd.Action = func() {
 			colls := parseCollections(*idMap)
-			serve(NewMongoEngine(*dbname, colls, *hostports, *isBinaryId), colls, *port)
+			log.Printf("connecting to mongodb '%s'\n", *hostports)
+			s, err := mgo.Dial(*hostports)
+			if err != nil {
+				panic(err)
+			}
+			s.SetMode(mgo.Monotonic, true)
+			serve(NewMongoEngine(*dbname, colls, *isBinaryId, s), colls, *port)
 		}
 	})
 
