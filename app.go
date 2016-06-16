@@ -17,14 +17,14 @@ import (
 	"sync"
 )
 
-func parseCollections(mappings string) map[string]Collection {
-	idMapping := make(map[string]Collection)
+func parseCollections(mappings string) map[string]CollectionSettings {
+	idMapping := make(map[string]CollectionSettings)
 	for _, mapping := range strings.Split(mappings, ",") {
 		kv := strings.Split(mapping, ":")
 		if len(kv) != 2 {
 			log.Printf("can't parse id mapping %s, skipping\n", mapping)
 		} else {
-			idMapping[kv[0]] = Collection{name: kv[0], idPropertyName: kv[1]}
+			idMapping[kv[0]] = CollectionSettings{name: kv[0], idPropertyName: kv[1]}
 		}
 	}
 
@@ -70,7 +70,7 @@ func main() {
 
 }
 
-func serve(engine Engine, collections map[string]Collection, port int) {
+func serve(engine Engine, collections map[string]CollectionSettings, port int) {
 	ah := apiHandlers{engine, collections}
 
 	m := mux.NewRouter()
@@ -115,7 +115,7 @@ func serve(engine Engine, collections map[string]Collection, port int) {
 
 type apiHandlers struct {
 	engine Engine
-	colls  map[string]Collection
+	colls  map[string]CollectionSettings
 }
 
 func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
@@ -204,7 +204,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getID(coll Collection, doc Document) string {
+func getID(coll CollectionSettings, doc Document) string {
 	if id, ok := doc[coll.idPropertyName].(string); ok {
 		return id
 	}
@@ -256,9 +256,9 @@ func (ah *apiHandlers) idDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (ah *apiHandlers) getCollection(name string) (Collection, error) {
+func (ah *apiHandlers) getCollection(name string) (CollectionSettings, error) {
 	coll := ah.colls[name]
-	if coll == (Collection{}) {
+	if coll == (CollectionSettings{}) {
 		return coll, fmt.Errorf("unknown collection %s", name)
 	}
 	return coll, nil

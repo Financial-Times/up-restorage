@@ -23,7 +23,7 @@ func (eng mongoEngine) Close() {
 }
 
 // NewMongoEngine returns an Engine based on a mongodb database backend
-func NewMongoEngine(dbName string, collections map[string]Collection, isBinaryId bool, s *mgo.Session) Engine {
+func NewMongoEngine(dbName string, collections map[string]CollectionSettings, isBinaryId bool, s *mgo.Session) Engine {
 	eng := &mongoEngine{
 		session:    s,
 		dbName:     dbName,
@@ -37,7 +37,7 @@ func NewMongoEngine(dbName string, collections map[string]Collection, isBinaryId
 	return eng
 }
 
-func (eng *mongoEngine) EnsureIndexes(collection Collection) {
+func (eng *mongoEngine) EnsureIndexes(collection CollectionSettings) {
 	c := eng.session.DB(eng.dbName).C(collection.name)
 
 	eng.session.ResetIndexCache()
@@ -58,7 +58,7 @@ func (eng *mongoEngine) EnsureIndexes(collection Collection) {
 
 }
 
-func (eng *mongoEngine) Drop(collection Collection) (bool, error) {
+func (eng *mongoEngine) Drop(collection CollectionSettings) (bool, error) {
 	err := eng.session.DB(eng.dbName).C(collection.name).DropCollection()
 	if err != nil {
 		log.Printf("failed to drop collection")
@@ -68,7 +68,7 @@ func (eng *mongoEngine) Drop(collection Collection) (bool, error) {
 	return true, nil
 }
 
-func (eng *mongoEngine) Write(collection Collection, id string, cont Document) error {
+func (eng *mongoEngine) Write(collection CollectionSettings, id string, cont Document) error {
 	coll := eng.session.DB(eng.dbName).C(collection.name)
 	if id == "" {
 		return errors.New("missing id")
@@ -80,11 +80,11 @@ func (eng *mongoEngine) Write(collection Collection, id string, cont Document) e
 	return nil
 }
 
-func (eng *mongoEngine) Count(collection Collection) (int, error) {
+func (eng *mongoEngine) Count(collection CollectionSettings) (int, error) {
 	return eng.session.DB(eng.dbName).C(collection.name).Count()
 }
 
-func (eng *mongoEngine) Read(collection Collection, id string) (bool, Document, error) {
+func (eng *mongoEngine) Read(collection CollectionSettings, id string) (bool, Document, error) {
 	c := eng.session.DB(eng.dbName).C(collection.name)
 	var content Document
 
@@ -109,7 +109,7 @@ func (eng *mongoEngine) Read(collection Collection, id string) (bool, Document, 
 	return true, content, nil
 }
 
-func (eng *mongoEngine) Delete(collection Collection, id string) error {
+func (eng *mongoEngine) Delete(collection CollectionSettings, id string) error {
 	c := eng.session.DB(eng.dbName).C(collection.name)
 	err := c.Remove(bson.M{collection.idPropertyName: id})
 	if err != mgo.ErrNotFound {
@@ -118,7 +118,7 @@ func (eng *mongoEngine) Delete(collection Collection, id string) error {
 	return nil
 }
 
-func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan Document, error) {
+func (eng mongoEngine) All(collection CollectionSettings, stopchan chan struct{}) (chan Document, error) {
 	cont := make(chan Document)
 
 	go func() {
@@ -143,7 +143,7 @@ func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan 
 	return cont, nil
 }
 
-func (eng mongoEngine) Ids(collection Collection, stopchan chan struct{}) (chan string, error) {
+func (eng mongoEngine) Ids(collection CollectionSettings, stopchan chan struct{}) (chan string, error) {
 	ids := make(chan string)
 	go func() {
 		defer close(ids)
