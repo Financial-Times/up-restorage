@@ -88,6 +88,23 @@ func main() {
 		}
 	})
 
+	app.Command("boltdb", "use the boltdb backend", func(cmd *cli.Cmd) {
+		dbdir := cmd.StringArg("DBDIR", "", "directory in which to place db files, one file per collection")
+		unsafe := cmd.BoolOpt("unsafe", false, "don't fsync. This is faster but not safe")
+		cmd.Action = func() {
+			engs := make(map[string]Engine)
+			for _, c := range parseCollections(*idMap) {
+				e, err := NewBoltEngine(*dbdir, c.name, c.idPropertyName, *unsafe)
+				if err != nil {
+					panic(err)
+				}
+				engs[c.name] = e
+			}
+
+			serve(engs, *port)
+		}
+	})
+
 	app.Run(os.Args)
 
 }
