@@ -263,10 +263,15 @@ func (ah *apiHandlers) idDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = coll.Delete(id)
+	deleted, err := coll.Delete(id)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("delete failed:\n%v\n", err), http.StatusInternalServerError)
 		return
+	}
+	if !deleted {
+		w.WriteHeader(http.StatusNotFound)
+	} else {
+		w.WriteHeader(http.StatusOK)
 	}
 }
 

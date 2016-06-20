@@ -115,13 +115,16 @@ func (eng *mongoEngine) Read(id string) (bool, Document, error) {
 	return true, content, nil
 }
 
-func (eng *mongoEngine) Delete(id string) error {
+func (eng *mongoEngine) Delete(id string) (bool, error) {
 	c := eng.session.DB(eng.dbName).C(eng.collectionName)
 	err := c.Remove(bson.M{eng.idPropertyName: id})
-	if err != mgo.ErrNotFound {
-		return err
+	if err != nil {
+		if err == mgo.ErrNotFound {
+			return false, nil
+		}
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
 func (eng mongoEngine) All(stopchan chan struct{}) (chan Document, error) {

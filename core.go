@@ -7,7 +7,7 @@ import (
 type Engine interface {
 	Write(doc Document) error
 	Read(id string) (bool, Document, error)
-	Delete(id string) error
+	Delete(id string) (bool, error)
 	Count() (int, error)
 	All(stopchan chan struct{}) (chan Document, error)
 	Ids(stopchan chan struct{}) (chan string, error)
