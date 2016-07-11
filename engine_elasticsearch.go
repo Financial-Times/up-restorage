@@ -34,7 +34,7 @@ func NewElasticEngine(elasticURL string, indexName string, collectionName string
 func (ee *elasticEngine) Drop() (bool, error) {
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s?_type=%s", ee.baseURL, ee.indexName, ee.collectionName), nil)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	resp, err := ee.client.Do(req)
 	if err != nil {
@@ -48,7 +48,7 @@ func (ee *elasticEngine) Drop() (bool, error) {
 		return false, nil
 
 	default:
-		panic("drop fail")
+		return false, fmt.Errorf("drop fail : %s", resp.Status)
 	}
 }
 
@@ -99,7 +99,7 @@ func (ee *elasticEngine) Delete(id string) (bool, error) {
 
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, ee.collectionName, id), nil)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	resp, err := ee.client.Do(req)
 	if err != nil {
@@ -118,7 +118,7 @@ func (ee *elasticEngine) Delete(id string) (bool, error) {
 func (ee *elasticEngine) Count() (int, error) {
 	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/_count", ee.baseURL, ee.indexName, ee.collectionName))
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode == 200 {
@@ -133,7 +133,7 @@ func (ee *elasticEngine) Count() (int, error) {
 	if res.StatusCode == 404 {
 		return 0, nil
 	}
-	panic(res.StatusCode)
+	return 0, fmt.Errorf("count failed : %s", res.Status)
 }
 
 type esCountResult struct {
@@ -143,7 +143,7 @@ type esCountResult struct {
 func (ee *elasticEngine) Read(id string) (bool, Document, error) {
 	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, ee.collectionName, id))
 	if err != nil {
-		panic(err)
+		return false, Document{}, err
 	}
 	defer res.Body.Close()
 	switch {
@@ -152,13 +152,13 @@ func (ee *elasticEngine) Read(id string) (bool, Document, error) {
 		var result esGetResult
 		err := dec.Decode(&result)
 		if err != nil {
-			panic(err)
+			return false, Document{}, err
 		}
 		return true, result.Source, nil
 	case res.StatusCode == 404:
 		return false, Document{}, nil
 	default:
-		panic(res.StatusCode)
+		return false, Document{}, fmt.Errorf("read fail: %s", res.Status)
 	}
 }
 
@@ -187,7 +187,7 @@ func (ee elasticEngine) query(q string, closechan chan struct{}) (chan Document,
 	cont := make(chan Document)
 	res, err := ee.client.Post(fmt.Sprintf("%s/%s/%s/_search", ee.baseURL, ee.indexName, ee.collectionName), "application/json", strings.NewReader(q))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	switch {
 	case res.StatusCode == 200:
@@ -197,7 +197,7 @@ func (ee elasticEngine) query(q string, closechan chan struct{}) (chan Document,
 	case res.StatusCode == 404:
 		return nil, ErrNotFound
 	default:
-		panic(res.StatusCode)
+		return nil, fmt.Errorf("query failed: %s", res.Status)
 	}
 
 	go func() {
