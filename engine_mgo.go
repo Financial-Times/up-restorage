@@ -13,9 +13,11 @@ import (
 )
 
 type mongoEngine struct {
-	session    *mgo.Session
-	dbName     string
-	isBinaryId bool
+	session        *mgo.Session
+	dbName         string
+	collectionName string
+	idPropertyName string
+	isBinaryId     bool
 }
 
 func (eng mongoEngine) Close() {
@@ -23,28 +25,22 @@ func (eng mongoEngine) Close() {
 }
 
 // NewMongoEngine returns an Engine based on a mongodb database backend
-func NewMongoEngine(dbName string, collections Collections, hostPorts string, isBinaryId bool) Engine {
-	log.Printf("connecting to mongodb '%s'\n", hostPorts)
-	s, err := mgo.Dial(hostPorts)
-	if err != nil {
-		panic(err)
-	}
-	s.SetMode(mgo.Monotonic, true)
+func NewMongoEngine(dbName string, collectionName string, idPropertyName string, isBinaryId bool, s *mgo.Session) Engine {
 	eng := &mongoEngine{
-		session:    s,
-		dbName:     dbName,
-		isBinaryId: isBinaryId,
+		session:        s,
+		dbName:         dbName,
+		collectionName: collectionName,
+		idPropertyName: idPropertyName,
+		isBinaryId:     isBinaryId,
 	}
 
-	for _, coll := range collections {
-		eng.EnsureIndexes(coll)
-	}
+	eng.EnsureIndexes()
 
 	return eng
 }
 
-func (eng *mongoEngine) EnsureIndexes(collection Collection) {
-	c := eng.session.DB(eng.dbName).C(collection.name)
+func (eng *mongoEngine) EnsureIndexes() {
+	c := eng.session.DB(eng.dbName).C(eng.collectionName)
 
 	eng.session.ResetIndexCache()
 
@@ -52,59 +48,58 @@ func (eng *mongoEngine) EnsureIndexes(collection Collection) {
 	c.Create(&mgo.CollectionInfo{})
 
 	err := c.EnsureIndex(mgo.Index{
-		Key:        []string{collection.idPropertyName},
+		Key:        []string{eng.idPropertyName},
 		Unique:     true,
 		DropDups:   true,
 		Background: false,
 		Sparse:     false,
 	})
 	if err != nil {
-		log.Printf("failed to create index by %s on %s : %v\n", collection.name, collection.idPropertyName, err.Error())
+		log.Printf("failed to create index by %s on %s : %v\n", eng.collectionName, eng.idPropertyName, err.Error())
 	}
 
 }
 
-func (eng *mongoEngine) Drop(collection Collection) (bool, error) {
-	err := eng.session.DB(eng.dbName).C(collection.name).DropCollection()
+func (eng *mongoEngine) Drop() (bool, error) {
+	err := eng.session.DB(eng.dbName).C(eng.collectionName).DropCollection()
 	if err != nil {
 		log.Printf("failed to drop collection")
 	}
-	eng.EnsureIndexes(collection)
+	eng.EnsureIndexes()
 	//TODO implement error handling and whether drop is successful or not
 	return true, nil
 }
 
-func (eng *mongoEngine) Write(collection Collection, id string, cont Document) error {
-	coll := eng.session.DB(eng.dbName).C(collection.name)
+func (eng *mongoEngine) Write(cont Document) error {
+	id, ok := cont[eng.idPropertyName].(string)
+	if !ok || id == "" {
+		return errors.New("missing or invalid id")
+	}
+	coll := eng.session.DB(eng.dbName).C(eng.collectionName)
 	if id == "" {
 		return errors.New("missing id")
 	}
-	_, err := coll.Upsert(bson.D{{collection.idPropertyName, id}}, cont)
+	_, err := coll.Upsert(bson.D{{eng.idPropertyName, id}}, cont)
 	if err != nil {
 		log.Printf("insert failed: %v\n", err)
 	}
 	return nil
 }
 
-func (eng *mongoEngine) Count(collection Collection) int {
-	coll := eng.session.DB(eng.dbName).C(collection.name)
-	count, err := coll.Count()
-	if err != nil {
-		panic(err)
-	}
-	return count
+func (eng *mongoEngine) Count() (int, error) {
+	return eng.session.DB(eng.dbName).C(eng.collectionName).Count()
 }
 
-func (eng *mongoEngine) Load(collection Collection, id string) (bool, Document, error) {
-	c := eng.session.DB(eng.dbName).C(collection.name)
+func (eng *mongoEngine) Read(id string) (bool, Document, error) {
+	c := eng.session.DB(eng.dbName).C(eng.collectionName)
 	var content Document
 
 	var err error
 	if eng.isBinaryId {
 		binaryId := bson.Binary{Kind: 0x04, Data: []byte(uuid.Parse(id))}
-		err = c.Find(bson.M{collection.idPropertyName: binaryId}).One(&content)
+		err = c.Find(bson.M{eng.idPropertyName: binaryId}).One(&content)
 	} else {
-		err = c.Find(bson.M{collection.idPropertyName: id}).One(&content)
+		err = c.Find(bson.M{eng.idPropertyName: id}).One(&content)
 	}
 
 	if err == mgo.ErrNotFound {
@@ -115,26 +110,29 @@ func (eng *mongoEngine) Load(collection Collection, id string) (bool, Document, 
 	}
 	cleanup(content)
 	if eng.isBinaryId {
-		content[collection.idPropertyName] = id
+		content[eng.idPropertyName] = id
 	}
 	return true, content, nil
 }
 
-func (eng *mongoEngine) Delete(collection Collection, id string) error {
-	c := eng.session.DB(eng.dbName).C(collection.name)
-	err := c.Remove(bson.M{collection.idPropertyName: id})
-	if err != mgo.ErrNotFound {
-		return err
+func (eng *mongoEngine) Delete(id string) (bool, error) {
+	c := eng.session.DB(eng.dbName).C(eng.collectionName)
+	err := c.Remove(bson.M{eng.idPropertyName: id})
+	if err != nil {
+		if err == mgo.ErrNotFound {
+			return false, nil
+		}
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
-func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan Document, error) {
+func (eng mongoEngine) All(stopchan chan struct{}) (chan Document, error) {
 	cont := make(chan Document)
 
 	go func() {
 		defer close(cont)
-		coll := eng.session.DB(eng.dbName).C(collection.name)
+		coll := eng.session.DB(eng.dbName).C(eng.collectionName)
 		iter := coll.Find(nil).Iter()
 		result := &Document{}
 		for iter.Next(result) {
@@ -154,18 +152,18 @@ func (eng mongoEngine) All(collection Collection, stopchan chan struct{}) (chan 
 	return cont, nil
 }
 
-func (eng mongoEngine) Ids(collection Collection, stopchan chan struct{}) (chan string, error) {
+func (eng mongoEngine) Ids(stopchan chan struct{}) (chan string, error) {
 	ids := make(chan string)
 	go func() {
 		defer close(ids)
-		coll := eng.session.DB(eng.dbName).C(collection.name)
-		iter := coll.Find(nil).Select(bson.M{collection.idPropertyName: true}).Iter()
+		coll := eng.session.DB(eng.dbName).C(eng.collectionName)
+		iter := coll.Find(nil).Select(bson.M{eng.idPropertyName: true}).Iter()
 		var result map[string]interface{}
 		for iter.Next(&result) {
 			select {
 			case <-stopchan:
 				break
-			case ids <- getUUIDString(result[collection.idPropertyName]):
+			case ids <- getUUIDString(result[eng.idPropertyName]):
 			}
 		}
 		if err := iter.Close(); err != nil {
@@ -173,6 +171,10 @@ func (eng mongoEngine) Ids(collection Collection, stopchan chan struct{}) (chan 
 		}
 	}()
 	return ids, nil
+}
+
+func (ee mongoEngine) IDPropertyName() string {
+	return ee.idPropertyName
 }
 
 func getUUIDString(uuidValue interface{}) string {

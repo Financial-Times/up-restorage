@@ -5,14 +5,15 @@ import (
 )
 
 type Engine interface {
-	Load(c Collection, id string) (bool, Document, error)
-	Write(c Collection, id string, doc Document) error
-	Count(c Collection) int
-	All(c Collection, stopchan chan struct{}) (chan Document, error)
-	Ids(c Collection, stopchan chan struct{}) (chan string, error)
-	Delete(c Collection, id string) error
-	Drop(c Collection) (bool, error)
+	Write(doc Document) error
+	Read(id string) (bool, Document, error)
+	Delete(id string) (bool, error)
+	Count() (int, error)
+	All(stopchan chan struct{}) (chan Document, error)
+	Ids(stopchan chan struct{}) (chan string, error)
+	Drop() (bool, error)
 	Close()
+	IDPropertyName() string
 }
 
 var (
@@ -22,9 +23,7 @@ var (
 
 type Document map[string]interface{}
 
-type Collections map[string]Collection
-
-type Collection struct {
+type CollectionSettings struct {
 	name           string
 	idPropertyName string
 }

@@ -11,15 +11,16 @@ import (
 )
 
 type elasticEngine struct {
-	client    *http.Client
-	baseURL   string
-	indexName string
+	client         *http.Client
+	baseURL        string
+	indexName      string
+	collectionName string
+	idPropertyName string
 }
 
-func NewElasticEngine(elasticURL string, indexName string) Engine {
-	transport := &http.Transport{MaxIdleConnsPerHost: 30}
+func NewElasticEngine(elasticURL string, indexName string, collectionName string, idPropertyName string, client *http.Client) Engine {
 	e := &elasticEngine{
-		client:    &http.Client{Transport: transport},
+		client:    client,
 		baseURL:   elasticURL,
 		indexName: indexName,
 	}
@@ -30,10 +31,10 @@ func NewElasticEngine(elasticURL string, indexName string) Engine {
 	return e
 }
 
-func (ee *elasticEngine) Drop(collection Collection) (bool, error) {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s?_type=%s", ee.baseURL, ee.indexName, collection.name), nil)
+func (ee *elasticEngine) Drop() (bool, error) {
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s?_type=%s", ee.baseURL, ee.indexName, ee.collectionName), nil)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	resp, err := ee.client.Do(req)
 	if err != nil {
@@ -47,13 +48,14 @@ func (ee *elasticEngine) Drop(collection Collection) (bool, error) {
 		return false, nil
 
 	default:
-		panic("drop fail")
+		return false, fmt.Errorf("drop fail : %s", resp.Status)
 	}
 }
 
-func (ee *elasticEngine) Write(collection Collection, id string, cont Document) error {
-	if id == "" {
-		return errors.New("missing id")
+func (ee *elasticEngine) Write(cont Document) error {
+	id, ok := cont[ee.idPropertyName].(string)
+	if !ok || id == "" {
+		return errors.New("missing or invalid id")
 	}
 
 	doneWrite := make(chan struct{})
@@ -70,7 +72,7 @@ func (ee *elasticEngine) Write(collection Collection, id string, cont Document) 
 		close(doneWrite)
 	}()
 
-	u := fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id)
+	u := fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, ee.collectionName, id)
 	req, err := http.NewRequest("PUT", u, r)
 	if err != nil {
 		return err
@@ -90,32 +92,33 @@ func (ee *elasticEngine) Write(collection Collection, id string, cont Document) 
 	}
 }
 
-func (ee *elasticEngine) Delete(collection Collection, id string) error {
+func (ee *elasticEngine) Delete(id string) (bool, error) {
 	if id == "" {
-		return errors.New("missing id")
+		return false, errors.New("missing id")
 	}
 
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id), nil)
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, ee.collectionName, id), nil)
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	resp, err := ee.client.Do(req)
 	if err != nil {
 		fmt.Printf("e: %v\n", err)
-		return err
+		return false, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 400 && resp.StatusCode != 404 {
-		return fmt.Errorf("delete request failed with status %d", resp.Status)
+		return false, fmt.Errorf("delete request failed with status %d", resp.Status)
 	}
 
-	return nil
+	deleted := resp.StatusCode != 404
+	return deleted, nil
 }
 
-func (ee *elasticEngine) Count(collection Collection) int {
-	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/_count", ee.baseURL, ee.indexName, collection.name))
+func (ee *elasticEngine) Count() (int, error) {
+	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/_count", ee.baseURL, ee.indexName, ee.collectionName))
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode == 200 {
@@ -123,24 +126,24 @@ func (ee *elasticEngine) Count(collection Collection) int {
 		var result esCountResult
 		err := dec.Decode(&result)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return result.Count
+		return result.Count, nil
 	}
 	if res.StatusCode == 404 {
-		return 0
+		return 0, nil
 	}
-	panic(res.StatusCode)
+	return 0, fmt.Errorf("count failed : %s", res.Status)
 }
 
 type esCountResult struct {
 	Count int `json:"count"`
 }
 
-func (ee *elasticEngine) Load(collection Collection, id string) (bool, Document, error) {
-	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, collection.name, id))
+func (ee *elasticEngine) Read(id string) (bool, Document, error) {
+	res, err := ee.client.Get(fmt.Sprintf("%s/%s/%s/%s", ee.baseURL, ee.indexName, ee.collectionName, id))
 	if err != nil {
-		panic(err)
+		return false, Document{}, err
 	}
 	defer res.Body.Close()
 	switch {
@@ -149,13 +152,13 @@ func (ee *elasticEngine) Load(collection Collection, id string) (bool, Document,
 		var result esGetResult
 		err := dec.Decode(&result)
 		if err != nil {
-			panic(err)
+			return false, Document{}, err
 		}
 		return true, result.Source, nil
 	case res.StatusCode == 404:
 		return false, Document{}, nil
 	default:
-		panic(res.StatusCode)
+		return false, Document{}, fmt.Errorf("read fail: %s", res.Status)
 	}
 }
 
@@ -163,20 +166,28 @@ type esGetResult struct {
 	Source Document `json:"_source"`
 }
 
-func (ee elasticEngine) All(collection Collection, closechan chan struct{}) (chan Document, error) {
-	q := fmt.Sprintf("{\"query\":{\"match_all\": {}}, \"fields\":[], \"size\": %d,  \"from\": 0}", ee.Count(collection)+1000)
-	return ee.query(collection, q, closechan)
+func (ee elasticEngine) All(closechan chan struct{}) (chan Document, error) {
+	count, err := ee.Count()
+	if err != nil {
+		return nil, err
+	}
+	q := fmt.Sprintf("{\"query\":{\"match_all\": {}}, \"fields\":[], \"size\": %d,  \"from\": 0}", count+1000)
+	return ee.query(q, closechan)
 }
 
-func (ee elasticEngine) Ids(collection Collection, stopchan chan struct{}) (chan string, error) {
+func (ee elasticEngine) Ids(stopchan chan struct{}) (chan string, error) {
 	panic("not implemented")
 }
 
-func (ee elasticEngine) query(collection Collection, q string, closechan chan struct{}) (chan Document, error) {
+func (ee elasticEngine) IDPropertyName() string {
+	return ee.idPropertyName
+}
+
+func (ee elasticEngine) query(q string, closechan chan struct{}) (chan Document, error) {
 	cont := make(chan Document)
-	res, err := ee.client.Post(fmt.Sprintf("%s/%s/%s/_search", ee.baseURL, ee.indexName, collection.name), "application/json", strings.NewReader(q))
+	res, err := ee.client.Post(fmt.Sprintf("%s/%s/%s/_search", ee.baseURL, ee.indexName, ee.collectionName), "application/json", strings.NewReader(q))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	switch {
 	case res.StatusCode == 200:
@@ -186,7 +197,7 @@ func (ee elasticEngine) query(collection Collection, q string, closechan chan st
 	case res.StatusCode == 404:
 		return nil, ErrNotFound
 	default:
-		panic(res.StatusCode)
+		return nil, fmt.Errorf("query failed: %s", res.Status)
 	}
 
 	go func() {
@@ -201,7 +212,7 @@ func (ee elasticEngine) query(collection Collection, q string, closechan chan st
 		}
 		for _, h := range result.Hits.Hits {
 			id := h.ID
-			found, c, err := ee.Load(collection, id)
+			found, c, err := ee.Read(id)
 			if err != nil {
 				panic(err)
 			}

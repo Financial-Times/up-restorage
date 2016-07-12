@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/jawher/mow.cli"
+	"gopkg.in/mgo.v2"
 	"io"
 	"log"
 	"net/http"
@@ -16,14 +17,14 @@ import (
 	"sync"
 )
 
-func parseCollections(mappings string) Collections {
-	idMapping := make(map[string]Collection)
+func parseCollections(mappings string) map[string]CollectionSettings {
+	idMapping := make(map[string]CollectionSettings)
 	for _, mapping := range strings.Split(mappings, ",") {
 		kv := strings.Split(mapping, ":")
 		if len(kv) != 2 {
 			log.Printf("can't parse id mapping %s, skipping\n", mapping)
 		} else {
-			idMapping[kv[0]] = Collection{name: kv[0], idPropertyName: kv[1]}
+			idMapping[kv[0]] = CollectionSettings{name: kv[0], idPropertyName: kv[1]}
 		}
 	}
 
@@ -44,7 +45,15 @@ func main() {
 		url := cmd.StringArg("URL", "", "elastic search endpoint url")
 		indexName := cmd.StringOpt("index-name", "store", "elastic search index name")
 		cmd.Action = func() {
-			serve(NewElasticEngine(*url, *indexName), parseCollections(*idMap), *port)
+			client := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 30}}
+
+			engs := make(map[string]Engine)
+			for _, c := range parseCollections(*idMap) {
+				e := NewElasticEngine(*url, *indexName, c.name, c.idPropertyName, client)
+				engs[c.name] = e
+			}
+
+			serve(engs, *port)
 		}
 	})
 
@@ -53,8 +62,20 @@ func main() {
 		dbname := cmd.StringOpt("dbname", "store", "database name")
 		isBinaryId := cmd.BoolOpt("binary-identity", false, "Is the configured id in a binary format?")
 		cmd.Action = func() {
-			colls := parseCollections(*idMap)
-			serve(NewMongoEngine(*dbname, colls, *hostports, *isBinaryId), colls, *port)
+			log.Printf("connecting to mongodb '%s'\n", *hostports)
+			s, err := mgo.Dial(*hostports)
+			if err != nil {
+				panic(err)
+			}
+			s.SetMode(mgo.Monotonic, true)
+
+			engs := make(map[string]Engine)
+			for _, c := range parseCollections(*idMap) {
+				e := NewMongoEngine(*dbname, c.name, c.idPropertyName, *isBinaryId, s)
+				engs[c.name] = e
+			}
+
+			serve(engs, *port)
 		}
 	})
 
@@ -62,8 +83,8 @@ func main() {
 
 }
 
-func serve(engine Engine, collections Collections, port int) {
-	ah := apiHandlers{engine, collections}
+func serve(engines map[string]Engine, port int) {
+	ah := apiHandlers{engines}
 
 	m := mux.NewRouter()
 	http.Handle("/", handlers.CombinedLoggingHandler(os.Stdout, m))
@@ -100,14 +121,15 @@ func serve(engine Engine, collections Collections, port int) {
 	// wait for ctrl-c
 	<-c
 	println("exiting")
-	engine.Close()
+	for _, engine := range engines {
+		engine.Close()
+	}
 
 	return
 }
 
 type apiHandlers struct {
-	engine Engine
-	colls  Collections
+	engines map[string]Engine
 }
 
 func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +141,7 @@ func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found, art, err := ah.engine.Load(coll, id)
+	found, art, err := coll.Read(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -174,7 +196,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer wg.Done()
 			for doc := range docCh {
-				err := ah.engine.Write(coll, getID(coll, doc), doc)
+				err := coll.Write(doc)
 				if err != nil {
 					errCh <- err
 					return
@@ -196,8 +218,8 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getID(coll Collection, doc Document) string {
-	if id, ok := doc[coll.idPropertyName].(string); ok {
+func getID(idPropertyName string, doc Document) string {
+	if id, ok := doc[idPropertyName].(string); ok {
 		return id
 	}
 	panic("no id")
@@ -219,12 +241,12 @@ func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if getID(coll, doc) != id {
+	if getID(coll.IDPropertyName(), doc) != id {
 		http.Error(w, "id does not match", http.StatusBadRequest)
 		return
 	}
 
-	err = ah.engine.Write(coll, id, doc)
+	err = coll.Write(doc)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("write failed:\n%v\n", err), http.StatusInternalServerError)
 		return
@@ -241,16 +263,21 @@ func (ah *apiHandlers) idDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = ah.engine.Delete(coll, id)
+	deleted, err := coll.Delete(id)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("delete failed:\n%v\n", err), http.StatusInternalServerError)
 		return
 	}
+	if !deleted {
+		w.WriteHeader(http.StatusNotFound)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
-func (ah *apiHandlers) getCollection(name string) (Collection, error) {
-	coll := ah.colls[name]
-	if coll == (Collection{}) {
+func (ah *apiHandlers) getCollection(name string) (Engine, error) {
+	coll, ok := ah.engines[name]
+	if !ok {
 		return coll, fmt.Errorf("unknown collection %s", name)
 	}
 	return coll, nil
@@ -265,7 +292,7 @@ func (ah *apiHandlers) dropHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ok, err := ah.engine.Drop(coll)
+	ok, err := coll.Drop()
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -289,7 +316,7 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	stop := make(chan struct{})
 	defer close(stop)
-	all, err := ah.engine.All(coll, stop)
+	all, err := coll.All(stop)
 	if err != nil {
 		switch {
 		case err == ErrInvalidQuery:
@@ -318,7 +345,7 @@ func (ah *apiHandlers) idsHandler(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	stop := make(chan struct{})
 	defer close(stop)
-	all, err := ah.engine.Ids(coll, stop)
+	all, err := coll.Ids(stop)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -339,5 +366,10 @@ func (ah *apiHandlers) countHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fmt.Fprintf(w, "%d\n", ah.engine.Count(coll))
+	count, err := coll.Count()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprintf(w, "%d\n", count)
 }
