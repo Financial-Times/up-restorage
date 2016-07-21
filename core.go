@@ -2,15 +2,14 @@ package main
 
 import (
 	"errors"
+
+	"github.com/Financial-Times/up-rw-app-api-go/rwapi"
 )
 
 type Engine interface {
-	Write(doc Document) error
-	Read(id string) (bool, Document, error)
-	Delete(id string) (bool, error)
-	Count() (int, error)
-	All(stopchan chan struct{}) (chan Document, error)
-	Ids(stopchan chan struct{}) (chan string, error)
+	rwapi.Service
+	rwapi.IDService
+
 	Drop() (bool, error)
 	Close()
 	IDPropertyName() string

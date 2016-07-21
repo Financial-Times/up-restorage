@@ -1,11 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 
-	"fmt"
-
+	"github.com/Financial-Times/up-rw-app-api-go/rwapi"
 	"github.com/kr/pretty"
 	"github.com/pborman/uuid"
 	"gopkg.in/mgo.v2"
@@ -34,12 +35,10 @@ func NewMongoEngine(dbName string, collectionName string, idPropertyName string,
 		isBinaryId:     isBinaryId,
 	}
 
-	eng.EnsureIndexes()
-
 	return eng
 }
 
-func (eng *mongoEngine) EnsureIndexes() {
+func (eng *mongoEngine) Initialise() error {
 	c := eng.session.DB(eng.dbName).C(eng.collectionName)
 
 	eng.session.ResetIndexCache()
@@ -47,17 +46,13 @@ func (eng *mongoEngine) EnsureIndexes() {
 	// create collection if it's not there
 	c.Create(&mgo.CollectionInfo{})
 
-	err := c.EnsureIndex(mgo.Index{
+	return c.EnsureIndex(mgo.Index{
 		Key:        []string{eng.idPropertyName},
 		Unique:     true,
 		DropDups:   true,
 		Background: false,
 		Sparse:     false,
 	})
-	if err != nil {
-		log.Printf("failed to create index by %s on %s : %v\n", eng.collectionName, eng.idPropertyName, err.Error())
-	}
-
 }
 
 func (eng *mongoEngine) Drop() (bool, error) {
@@ -65,12 +60,13 @@ func (eng *mongoEngine) Drop() (bool, error) {
 	if err != nil {
 		log.Printf("failed to drop collection")
 	}
-	eng.EnsureIndexes()
+	eng.Initialise()
 	//TODO implement error handling and whether drop is successful or not
 	return true, nil
 }
 
-func (eng *mongoEngine) Write(cont Document) error {
+func (eng *mongoEngine) Write(resource interface{}) error {
+	cont := resource.(Document)
 	id, ok := cont[eng.idPropertyName].(string)
 	if !ok || id == "" {
 		return errors.New("missing or invalid id")
@@ -90,7 +86,7 @@ func (eng *mongoEngine) Count() (int, error) {
 	return eng.session.DB(eng.dbName).C(eng.collectionName).Count()
 }
 
-func (eng *mongoEngine) Read(id string) (bool, Document, error) {
+func (eng *mongoEngine) Read(id string) (interface{}, bool, error) {
 	c := eng.session.DB(eng.dbName).C(eng.collectionName)
 	var content Document
 
@@ -103,16 +99,16 @@ func (eng *mongoEngine) Read(id string) (bool, Document, error) {
 	}
 
 	if err == mgo.ErrNotFound {
-		return false, Document{}, nil
+		return nil, false, nil
 	}
 	if err != nil {
-		return false, Document{}, err
+		return nil, false, err
 	}
 	cleanup(content)
 	if eng.isBinaryId {
 		content[eng.idPropertyName] = id
 	}
-	return true, content, nil
+	return content, true, nil
 }
 
 func (eng *mongoEngine) Delete(id string) (bool, error) {
@@ -127,54 +123,39 @@ func (eng *mongoEngine) Delete(id string) (bool, error) {
 	return true, nil
 }
 
-func (eng mongoEngine) All(stopchan chan struct{}) (chan Document, error) {
-	cont := make(chan Document)
-
-	go func() {
-		defer close(cont)
-		coll := eng.session.DB(eng.dbName).C(eng.collectionName)
-		iter := coll.Find(nil).Iter()
-		result := &Document{}
-		for iter.Next(result) {
-			cleanup(*result)
-			select {
-			case <-stopchan:
-				break
-			case cont <- *result:
-				result = &Document{}
-			}
+func (eng mongoEngine) IDs(f func(id rwapi.IDEntry) (bool, error)) error {
+	coll := eng.session.DB(eng.dbName).C(eng.collectionName)
+	iter := coll.Find(nil).Select(bson.M{eng.idPropertyName: true}).Iter()
+	var result map[string]interface{}
+	for iter.Next(&result) {
+		more, err := f(rwapi.IDEntry{ID: getUUIDString(result[eng.idPropertyName])})
+		if !more || err != nil {
+			return err
 		}
-		if err := iter.Close(); err != nil {
-			panic(err)
-		}
-	}()
-
-	return cont, nil
-}
-
-func (eng mongoEngine) Ids(stopchan chan struct{}) (chan string, error) {
-	ids := make(chan string)
-	go func() {
-		defer close(ids)
-		coll := eng.session.DB(eng.dbName).C(eng.collectionName)
-		iter := coll.Find(nil).Select(bson.M{eng.idPropertyName: true}).Iter()
-		var result map[string]interface{}
-		for iter.Next(&result) {
-			select {
-			case <-stopchan:
-				break
-			case ids <- getUUIDString(result[eng.idPropertyName]):
-			}
-		}
-		if err := iter.Close(); err != nil {
-			panic(err)
-		}
-	}()
-	return ids, nil
+	}
+	return iter.Close()
 }
 
 func (ee mongoEngine) IDPropertyName() string {
 	return ee.idPropertyName
+}
+
+func (ee mongoEngine) DecodeJSON(dec *json.Decoder) (interface{}, string, error) {
+	var doc Document
+	if err := dec.Decode(&doc); err != nil {
+		return nil, "", err
+	}
+
+	id, ok := doc[ee.idPropertyName].(string)
+	if !ok {
+		return nil, "", errors.New("no id found in document")
+	}
+
+	return doc, id, nil
+}
+
+func (ee mongoEngine) Check() error {
+	return errors.New("check not implemented")
 }
 
 func getUUIDString(uuidValue interface{}) string {

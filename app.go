@@ -3,18 +3,21 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-	"github.com/jawher/mow.cli"
-	"gopkg.in/mgo.v2"
 	"io"
 	"log"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strings"
 	"sync"
+
+	_ "net/http/pprof"
+
+	"github.com/Financial-Times/up-rw-app-api-go/rwapi"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
+	"github.com/jawher/mow.cli"
+	"gopkg.in/mgo.v2"
 )
 
 func parseCollections(mappings string) map[string]CollectionSettings {
@@ -50,6 +53,9 @@ func main() {
 			engs := make(map[string]Engine)
 			for _, c := range parseCollections(*idMap) {
 				e := NewElasticEngine(*url, *indexName, c.name, c.idPropertyName, client)
+				if err := e.Initialise(); err != nil {
+					panic(err)
+				}
 				engs[c.name] = e
 			}
 
@@ -72,6 +78,9 @@ func main() {
 			engs := make(map[string]Engine)
 			for _, c := range parseCollections(*idMap) {
 				e := NewMongoEngine(*dbname, c.name, c.idPropertyName, *isBinaryId, s)
+				if err := e.Initialise(); err != nil {
+					panic(err)
+				}
 				engs[c.name] = e
 			}
 
@@ -141,7 +150,7 @@ func (ah *apiHandlers) idReadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found, art, err := coll.Read(id)
+	art, found, err := coll.Read(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -164,7 +173,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	errCh := make(chan error, 2)
-	docCh := make(chan Document)
+	docCh := make(chan interface{})
 
 	var wg sync.WaitGroup
 
@@ -176,8 +185,7 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 
 		dec := json.NewDecoder(r.Body) //TODO: bufio?
 		for {
-			var doc Document
-			err := dec.Decode(&doc)
+			doc, _, err := coll.DecodeJSON(dec)
 			if err == io.EOF {
 				return
 			}
@@ -218,13 +226,6 @@ func (ah *apiHandlers) putAllHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getID(idPropertyName string, doc Document) string {
-	if id, ok := doc[idPropertyName].(string); ok {
-		return id
-	}
-	panic("no id")
-}
-
 func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -235,13 +236,12 @@ func (ah *apiHandlers) idWriteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var doc Document
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&doc); err != nil {
+	doc, docId, err := coll.DecodeJSON(json.NewDecoder(r.Body))
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if getID(coll.IDPropertyName(), doc) != id {
+	if docId != id {
 		http.Error(w, "id does not match", http.StatusBadRequest)
 		return
 	}
@@ -314,9 +314,18 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	enc := json.NewEncoder(w)
-	stop := make(chan struct{})
-	defer close(stop)
-	all, err := coll.All(stop)
+	err = coll.IDs(func(entry rwapi.IDEntry) (bool, error) {
+		doc, found, err := coll.Read(entry.ID)
+		if !found || err != nil {
+			return false, err
+		}
+		if err := enc.Encode(doc); err != nil {
+			return false, err
+		}
+		fmt.Fprint(w, "\n")
+		return true, nil
+	})
+
 	if err != nil {
 		switch {
 		case err == ErrInvalidQuery:
@@ -326,11 +335,6 @@ func (ah *apiHandlers) dumpAll(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
-	}
-	for doc := range all {
-		enc.Encode(doc)
-		fmt.Fprint(w, "\n")
 	}
 }
 
@@ -343,19 +347,17 @@ func (ah *apiHandlers) idsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	enc := json.NewEncoder(w)
-	stop := make(chan struct{})
-	defer close(stop)
-	all, err := coll.Ids(stop)
+
+	err = coll.IDs(func(id rwapi.IDEntry) (bool, error) {
+		err := enc.Encode(id)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	id := struct {
-		ID string `json:"id"`
-	}{}
-	for docId := range all {
-		id.ID = docId
-		enc.Encode(id)
 	}
 }
 
